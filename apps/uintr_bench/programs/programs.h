@@ -10,4 +10,9 @@ long long sum();
 
 long long matmul();
 
+long long matmul_int();
+
+long long mcf();
+void mcf_init();
+
 #endif // PROGRAMS_H

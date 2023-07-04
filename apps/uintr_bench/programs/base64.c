@@ -19,11 +19,11 @@ const char* chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 static char decode_table[256];
 
 int encode_size(int size) {
-  return (int)(size * 4 / 3.0) + 6;
+  return (int)(size * 4 / 3) + 6;
 }
 
 int decode_size(int size) {
-  return (int)(size * 3 / 4.0) + 6;
+  return (int)(size * 3 / 4) + 6;
 }
 
 void init_decode_table() {
@@ -109,6 +109,15 @@ void encode(int size, const char* str, int* out_size, char** output) {
   }
   *out = '\0';
   *out_size = out - *output;
+  
+  // _clui();
+  // long long res = 0;
+  // int i;
+  // for (i = 0; i < *out_size; ++i) {
+  //   res += (*output)[i];
+  // }
+  // printf("encode: %c %lld\n", (*output)[0], res);
+  // _stui();
 }
 
 void base64_init() {

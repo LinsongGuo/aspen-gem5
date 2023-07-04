@@ -10,11 +10,17 @@ INC += -I$(ROOT_PATH)/bindings/cc
 
 RUNTIME_LIBS := $(RUNTIME_LIBS) -lnuma
 
-# CXXFLAGS := $(subst -O3,-O2,$(CXXFLAGS))
+# CXXFLAGS := $(subst -O3,-O0,$(CXXFLAGS))
 
 program_src = $(wildcard programs/*.c)
 program_obj = $(patsubst %.c,%.o,$(program_src))
 uintr_obj = uintr.o 
+
+# For mcf:
+mcf_src = $(wildcard programs/mcf/src/*.c)
+mcf_obj =  $(patsubst %.c,%.o,$(mcf_src))
+# mcf_obj = implicit.o mcf.o mcfutil.o output.o pbeampp.o pbla.o pflowup.o psimplex.o pstart.o readmin.o treeup.o
+program_obj += $(mcf_obj)
 
 # must be first
 all: bench 
@@ -46,4 +52,4 @@ endif
 
 .PHONY: clean
 clean:
-	rm -f $(obj) $(dep) $(uintr_obj) bench # $(program_obj)
+	rm -f $(obj) $(dep) $(uintr_obj) bench

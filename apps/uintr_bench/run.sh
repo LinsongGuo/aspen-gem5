@@ -1,9 +1,11 @@
 #!/bin/bash
 
 work=$1
-Tus=(100000000 10000 1000 100 50 20 10 5 4 3 2 1)
-Tname=(baseline 10ms 1ms 100us 50us 20us 10us 5us 4us 3us 2us 1us)
-trial=10
+Tus=(100000000 10000 5000 1000 500 100 50 20 10 7 5 3 1)
+Tname=(baseline 10ms 5ms 1ms 500us 100us 50us 20us 10us 7us 5us 3us 1us)
+# Tus=(100000000 5 3 1)
+# Tname=(baseline 5us 3us 1us)
+trial=33
 
 folder="results/$work"
 if [ ! -d "$folder" ]; then

@@ -3,9 +3,11 @@ import re
 import os
 import pandas as pd
 
-T = [100000000, 10000, 1000, 100, 50, 20, 10, 5, 4, 3, 2, 1]
-Tname=['baseline', '10ms', '1ms', '100us', '50us', '20us', '10us', '5us', '4us', '3us', '2us', '1us']
-trial = 5
+T = [100000000, 10000, 5000, 1000, 500, 100, 50, 20, 10, 7, 5, 3, 1]
+Tname=['baseline', '10ms', '5ms', '1ms', '500us', '100us', '50us', '20us', '10us', '7us', '5us', '3us', '1us']
+# T = [100000000,  5, 3, 1]
+# Tname=['baseline', '5us', '3us', '1us']
+trial = 33
 
 def get_data(filename):
 	exe, uintr = None, None
@@ -40,6 +42,10 @@ def collect(work_spec):
 				exe_.append(exe)
 				uintr_.append(uintr)
 		idx = get_median_index(exe_)
+		# if tname == 'baseline' and work_spec == 'mcf':
+		# 	exes.append(1.662951936)
+		# 	uintrs.append(0)
+		# else:
 		exes.append(exe_[idx])
 		uintrs.append(uintr_[idx])
 
@@ -60,10 +66,11 @@ def collect(work_spec):
 cur_path = '.'
 work_specs = []
 for name in os.listdir(cur_path):
-    if 'collect' in name or 'plot' in name or 'overhead' in name or 'slowdown' in name:
+    if 'collect' in name or 'plot' in name or 'overhead' in name or 'slowdown' in name or 'cache_contention' in name or 'breakup' in name:
+        continue
+    if  name == 'sum+sum+sum+sum':
         continue
     work_specs.append(name)
-    # print(name, end=' ')
     
 for work_spec in work_specs:
 	collect(work_spec)
