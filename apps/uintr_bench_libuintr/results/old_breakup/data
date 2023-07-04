@@ -1,0 +1,12 @@
+mcf: cache: 0.0, uintr: 0.489, swtch: 0.06, c+u+s:0.54899, total: 0.57759
+mcf+mcf: cache: 0.193, uintr: 0.489, swtch: 0.06, c+u+s:0.74231, total: 0.7709
+mcf+mcf+mcf: cache: 0.582, uintr: 0.489, swtch: 0.06, c+u+s:1.1314, total: 1.16
+mcf+mcf+mcf+mcf: cache: 0.611, uintr: 0.489, swtch: 0.06, c+u+s:1.1603, total: 1.1889
+base64: cache: 0.0, uintr: 0.415, swtch: 0.06, c+u+s:0.47547, total: 0.56335
+base64+base64: cache: 0.0418, uintr: 0.415, swtch: 0.06, c+u+s:0.51728, total: 0.60516
+base64+base64+base64: cache: 0.0607, uintr: 0.415, swtch: 0.06, c+u+s:0.53622, total: 0.62409
+base64+base64+base64+base64: cache: 0.0926, uintr: 0.415, swtch: 0.06, c+u+s:0.56811, total: 0.65598
+matmul_int: cache: 0.0, uintr: 0.268, swtch: 0.06, c+u+s:0.3275, total: 0.36167
+matmul_int+matmul_int: cache: 0.0612, uintr: 0.268, swtch: 0.06, c+u+s:0.3887, total: 0.42286
+matmul_int+matmul_int+matmul_int: cache: 0.175, uintr: 0.268, swtch: 0.06, c+u+s:0.50213, total: 0.53629
+matmul_int+matmul_int+matmul_int+matmul_int: cache: 0.217, uintr: 0.268, swtch: 0.06, c+u+s:0.54444, total: 0.57861
