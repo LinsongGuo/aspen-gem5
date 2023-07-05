@@ -1,6 +1,9 @@
 ROOT_PATH=.
 include $(ROOT_PATH)/build/shared.mk
 
+# for user interrupts support
+CFLAGS += -muintr
+
 DPDK_PATH = dpdk
 CHECKFLAGS = -D__CHECKER__ -Waddress-space
 CFLAGS += -MMD

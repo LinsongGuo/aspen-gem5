@@ -36,6 +36,7 @@ static const struct init_entry global_init_handlers[] = {
 	GLOBAL_INITIALIZER(sched),
 	GLOBAL_INITIALIZER(preempt),
 	GLOBAL_INITIALIZER(smalloc),
+	GLOBAL_INITIALIZER(uintr),
 
 	/* network stack */
 	GLOBAL_INITIALIZER(net),
@@ -65,6 +66,7 @@ static const struct init_entry thread_init_handlers[] = {
 	THREAD_INITIALIZER(sched),
 	THREAD_INITIALIZER(timer),
 	THREAD_INITIALIZER(smalloc),
+	THREAD_INITIALIZER(uintr),
 
 	/* network stack */
 	THREAD_INITIALIZER(net),
@@ -78,6 +80,9 @@ static const struct init_entry thread_init_handlers[] = {
 	{__cstr(name), &name ## _init_late}
 
 static const struct init_entry late_init_handlers[] = {
+	/* runtime core */
+	LATE_INITIALIZER(uintr),
+	
 	/* network stack */
 	LATE_INITIALIZER(net),
 	LATE_INITIALIZER(arp),

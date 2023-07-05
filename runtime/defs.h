@@ -701,6 +701,7 @@ extern int smalloc_init_thread(void);
 extern int storage_init_thread(void);
 extern int directpath_init_thread(void);
 extern int preempt_init_thread(void);
+extern int uintr_init_thread(void);
 
 /* global initialization */
 extern int kthread_init(void);
@@ -718,6 +719,7 @@ extern int directpath_init(void);
 #ifdef GC
 extern int gc_init(void);
 #endif
+extern int uintr_init(void);
 
 /* late initialization */
 extern int ioqueues_register_iokernel(void);
@@ -727,6 +729,7 @@ extern int tcp_init_late(void);
 extern int rcu_init_late(void);
 extern int directpath_init_late(void);
 extern int net_init_late(void);
+extern int uintr_init_late(void);
 
 extern int ioqueues_init_early(void);
 extern int net_init_mempool_late(void);
