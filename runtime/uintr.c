@@ -106,7 +106,7 @@ void* uintr_timer(void*) {
     base_init_thread();
 
     // set_thread_affinity(12);
-    uintr_timer_start();
+    // uintr_timer_start();
     
     int i;
     for (i = 0; i < kthread_num; ++i) {

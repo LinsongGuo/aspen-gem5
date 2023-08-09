@@ -20,9 +20,9 @@ int main(int argc, char **argv) {
   rocksdb_options_set_allow_mmap_reads(options, 1);
   rocksdb_options_set_allow_mmap_writes(options, 1);
   rocksdb_slicetransform_t *prefix_extractor =
-      rocksdb_slicetransform_create_fixed_prefix(8);
+      rocksdb_slicetransform_create_fixed_prefix(4);
   rocksdb_options_set_prefix_extractor(options, prefix_extractor);
-  // rocksdb_options_set_plain_table_factory(options, 0, 10, 0.75, 3);
+  rocksdb_options_set_plain_table_factory(options, 0, 10, 0.75, 3);
 
   long cpus = sysconf(_SC_NPROCESSORS_ONLN);  // get # of online cores
   rocksdb_options_increase_parallelism(options, 0);
@@ -50,9 +50,12 @@ int main(int argc, char **argv) {
   for (int i = 0; i < 5000; i++) {
     char key[10];
     // char value[64];
-    snprintf(key, sizeof(key), "%d", i);
+    // snprintf(key, sizeof(key), "%d", i);
+    snprintf(key, 10, "key%d", i);
+    size_t keylen = strlen(key);
+    printf("%d %s\n", keylen, key);
     //  snprintf(value, sizeof(value), "%lld", dist(e2));
-    rocksdb_put(db, writeoptions, key, strlen(key), value, strlen(value) + 1,
+    rocksdb_put(db, writeoptions, key, keylen, value, strlen(value) + 1,
                 &err);
     if (err) {
       printf("PUT failed: %s\n", err);
@@ -61,12 +64,13 @@ int main(int argc, char **argv) {
     assert(!err);
   }
 
-  // // Get value
+  // Get value
   rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
   for (int i = 0; i < 5000; i++) {
     size_t len;
     char key[10];
-    snprintf(key, sizeof(key), "%d", i);
+    // snprintf(key, sizeof(key), "%d", i);
+    snprintf(key, 10, "key%d", i);
     char *returned_value =
         rocksdb_get(db, readoptions, key, strlen(key), &len, &err);
     if (err) {
@@ -75,7 +79,7 @@ int main(int argc, char **argv) {
     }
     // printf("Returned value: %s (%d)\n", returned_value, i);
     assert(strcmp(returned_value, "value") == 0);
-    // free(returned_value);
+    free(returned_value);
   }
 
   // cleanup

@@ -28,6 +28,10 @@ static __thread struct key_data *kd_noruntime;
 
 int pthread_key_create(pthread_key_t* key_out, void (*destructor)(void*))
 {
+	unsigned char uif = _testui();
+	if (uif)
+		_clui();
+
 	unsigned int key;
 
 	shim_spin_lock_np(&key_lock);
@@ -45,6 +49,9 @@ int pthread_key_create(pthread_key_t* key_out, void (*destructor)(void*))
 	shim_spin_unlock_np(&key_lock);
 
 	*key_out = key;
+
+	if (uif)
+		_stui();
 	return 0;
 }
 
@@ -53,16 +60,19 @@ static struct key_data *get_ts_struct(int key)
 	struct key_data *arr;
 	uint64_t keygen;
 
-	if (likely(shim_active()))
+	if (likely(shim_active())) {
 		arr = (struct key_data *)get_uthread_specific();
-	else
+	}
+	else {
 		arr = kd_noruntime;
+	}	
 
 	if (unlikely(!arr)) {
 		arr = calloc(MAX_KEYS, sizeof(struct key_data));
 		BUG_ON(!arr);
-		if (shim_active())
+		if (shim_active()) {
 			set_uthread_specific((uint64_t)arr);
+		}
 		else
 			kd_noruntime = arr;
 	}
@@ -78,17 +88,28 @@ static struct key_data *get_ts_struct(int key)
 
 void* pthread_getspecific(pthread_key_t key)
 {
+	unsigned char uif = _testui();
+	if (uif)
+		_clui();
+
 	struct key_data *kd;
 
 	if (unlikely(key >= MAX_KEYS))
 		return NULL;
 
 	kd = get_ts_struct(key);
+
+	if (uif)
+		_stui();
 	return kd->data;
 }
 
 int pthread_key_delete(pthread_key_t key)
 {
+	unsigned char uif = _testui();
+	if (uif)
+		_clui();
+
 	if (unlikely(key >= MAX_KEYS))
 		return -EINVAL;
 
@@ -100,11 +121,18 @@ int pthread_key_delete(pthread_key_t key)
 	if (destructors[key])
 		log_warn_ratelimited("unimplemented: pthread_key_delete with destructor");
 	shim_spin_unlock_np(&key_lock);
+
+	if (uif)
+		_stui();
 	return 0;
 }
 
 int pthread_setspecific(pthread_key_t key, const void* value)
 {
+	unsigned char uif = _testui();
+	if (uif)
+		_clui();
+
 	struct key_data *kd;
 
 	if (unlikely(key >= MAX_KEYS))
@@ -112,5 +140,8 @@ int pthread_setspecific(pthread_key_t key, const void* value)
 
 	kd = get_ts_struct(key);
 	kd->data = (void *)value;
+	
+	if (uif)
+		_stui();
 	return 0;
 }

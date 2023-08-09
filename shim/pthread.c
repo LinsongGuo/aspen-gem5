@@ -93,9 +93,17 @@ static int thread_join(struct join_handle *j, void **retval)
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 		   void *(*start_routine)(void *), void *arg)
 {
+	unsigned char uif = _testui();
+	if (uif)
+		_clui();
+
+	// printf("CALL pthread_create\n");
 	NOTSELF(pthread_create, thread, attr, start_routine, arg);
 	return thread_spawn_joinable((struct join_handle **)thread,
 				     start_routine, arg);
+
+	if (uif)
+		_stui();
 }
 
 int pthread_detach(pthread_t thread)
@@ -106,8 +114,15 @@ int pthread_detach(pthread_t thread)
 
 int pthread_join(pthread_t thread, void **retval)
 {
+	unsigned char uif = _testui();
+	if (uif)
+		_clui();
+
 	NOTSELF(pthread_join, thread, retval);
 	return thread_join((struct join_handle *)thread, retval);
+
+	if (uif)
+		_stui();
 }
 
 int pthread_yield(void)

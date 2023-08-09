@@ -8,10 +8,14 @@ void* operator new(size_t sz) {
     // printf("new\n");
     void *res = malloc(sz);
 
+    // unsigned char uif = _testui();
+    // if (uif)
+    //     _clui();    
+    // printf("new: %p\n", res);
+    // if (uif)
+    //     _stui();
+
     if (!res) {
-        unsigned char uif = _testui();
-        if (uif)
-            _clui();
         throw std::bad_alloc();
     }
 

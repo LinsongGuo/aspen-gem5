@@ -18,6 +18,10 @@ struct rt_semaphore {
    with other processes.  */
 int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 {
+	unsigned uif = _testui();
+	if (uif)
+		_clui();
+
 	struct rt_semaphore *rt_sem;
 
 	NOTSELF(sem_init, __sem, __pshared, __value);
@@ -38,6 +42,9 @@ int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 	list_head_init(&rt_sem->waiters);
 	rt_sem->value = __value;
 	*(struct rt_semaphore **)__sem = rt_sem;
+
+	if (uif)
+		_stui();
 	return 0;
 }
 
@@ -81,6 +88,10 @@ int sem_unlink(const char *__name)
     __THROW.  */
 int sem_wait(sem_t *__sem)
 {
+	unsigned uif = _testui();
+	if (uif)
+		_clui();
+		
 	thread_t *myth;
 	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 
@@ -96,6 +107,9 @@ int sem_wait(sem_t *__sem)
     myth = thread_self();
     list_add_tail(&rt_sem->waiters, &myth->link);
     thread_park_and_unlock_np(&rt_sem->lock);
+
+	if (uif)
+		_stui();
     return 0;
 }
 
@@ -134,6 +148,10 @@ int sem_trywait(sem_t *__sem)
 /* Post SEM.  */
 int sem_post(sem_t *__sem)
 {
+	unsigned uif = _testui();
+	if (uif)
+		_clui();
+
 	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 	thread_t *waketh;
 
@@ -150,6 +168,8 @@ int sem_post(sem_t *__sem)
 	if (waketh)
 		thread_ready(waketh);
 
+	if (uif)
+		_stui();
 	return 0;
 }
 

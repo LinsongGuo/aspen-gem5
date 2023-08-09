@@ -785,8 +785,10 @@ static __always_inline thread_t *__thread_create(void)
 		preempt_enable();
 		return NULL;
 	}
-
+	// memset(th, 0, STACK_PTR_SIZE);
+	
 	s = stack_alloc();
+	//printf("stack size: %d %d, %p - %p\n", STACK_PTR_SIZE, RUNTIME_STACK_SIZE, s->usable + STACK_PTR_SIZE, s->usable);
 	if (unlikely(!s)) {
 		tcache_free(perthread_ptr(thread_pt), th);
 		preempt_enable();
@@ -799,6 +801,7 @@ static __always_inline thread_t *__thread_create(void)
 	th->main_thread = false;
 	th->thread_ready = false;
 	th->thread_running = false;
+	th->tlsvar = NULL;
 
 	return th;
 }
