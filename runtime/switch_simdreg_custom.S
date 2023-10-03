@@ -37,6 +37,23 @@
 #define RIP	(120)	/* instruction pointer */
 #define RSP	(128)	/* stack pointer */
 
+/* mask registers */
+#define K1  (136)
+#define K2  (144)
+#define K3  (152)
+#define K4  (160)
+#define K5  (168)
+#define K6  (176)
+#define K7  (184)
+
+/* AVX registers */
+#define YMM0 (192)
+#define YMM1 (224)
+#define YMM16 (256)
+#define YMM17 (288)
+#define YMM18 (320)
+#define YMM19 (352)
+#define YMM20 (384)
 /**
  * __jmp_thread - executes a thread from the runtime
  * @tf: the trap frame to restore (%rdi)
@@ -61,6 +78,23 @@ __jmp_thread:
 	movq    R14(%rdi), %r14
 	movq    R15(%rdi), %r15
 
+	/* kmovq   K0(%rdi), %k0 */
+	kmovq   K1(%rdi), %k1
+	kmovq   K2(%rdi), %k2
+	kmovq   K3(%rdi), %k3
+	kmovq   K4(%rdi), %k4
+	kmovq   K5(%rdi), %k5
+	kmovq   K6(%rdi), %k6
+	kmovq   K7(%rdi), %k7
+
+	VMOVDQA64 YMM0(%rdi),  %ymm0
+	VMOVDQA64 YMM1(%rdi),  %ymm1
+	VMOVDQA64 YMM16(%rdi), %ymm16
+	VMOVDQA64 YMM17(%rdi), %ymm17
+	VMOVDQA64 YMM18(%rdi), %ymm18
+	VMOVDQA64 YMM19(%rdi), %ymm19
+	VMOVDQA64 YMM20(%rdi), %ymm20
+	
 	/* set first argument (in case new thread) */
 	movq    RDI(%rdi), %rdi /* ARG0 */
 
@@ -113,6 +147,25 @@ __jmp_thread_direct:
 	movq    %r14, R14(%rdi)
 	movq    %r15, R15(%rdi)
 
+	/* kmovq   %k0, K0(%rdi) */
+	kmovq   %k1, K1(%rdi)
+	kmovq   %k2, K2(%rdi)
+	kmovq   %k3, K3(%rdi)
+	kmovq   %k4, K4(%rdi)
+	kmovq   %k5, K5(%rdi)
+	kmovq   %k6, K6(%rdi)
+	kmovq   %k7, K7(%rdi)
+
+	/* VMOVDQA64 %ymm0,  YMM0(%rdi) */
+	/*movdqa %xmm1,  YMM1(%rdi) */
+	VMOVDQA64 %ymm0,  YMM0(%rdi)  
+	VMOVDQA64 %ymm1,  YMM1(%rdi)
+	VMOVDQA64 %ymm16, YMM16(%rdi) 
+	VMOVDQA64 %ymm17, YMM17(%rdi) 
+	VMOVDQA64 %ymm18, YMM18(%rdi) 
+	VMOVDQA64 %ymm19, YMM19(%rdi) 
+	VMOVDQA64 %ymm20, YMM20(%rdi)
+
 	/* restore ip and stack */
 	movq    RSP(%rsi), %rsp
 	movq    RIP(%rsi), %r8
@@ -127,6 +180,25 @@ __jmp_thread_direct:
 	movq    R13(%rsi), %r13
 	movq    R14(%rsi), %r14
 	movq    R15(%rsi), %r15
+
+	/* kmovq   K0(%rsi), %k0 */
+	kmovq   K1(%rsi), %k1
+	kmovq   K2(%rsi), %k2
+	kmovq   K3(%rsi), %k3
+	kmovq   K4(%rsi), %k4
+	kmovq   K5(%rsi), %k5
+	kmovq   K6(%rsi), %k6
+	kmovq   K7(%rsi), %k7
+
+	/* VMOVDQA64 YMM0(%rsi),  %ymm0 */
+	/* movdqa YMM1(%rsi),  %xmm1 */ 
+	VMOVDQA64 YMM0(%rsi),  %ymm0
+	VMOVDQA64 YMM1(%rsi),  %ymm1
+	VMOVDQA64 YMM16(%rsi), %ymm16
+	VMOVDQA64 YMM17(%rsi), %ymm17
+	VMOVDQA64 YMM18(%rsi), %ymm18
+	VMOVDQA64 YMM19(%rsi), %ymm19
+	VMOVDQA64 YMM20(%rsi), %ymm20
 
 	/* set first argument (in case new thread) */
 	movq    RDI(%rsi), %rdi /* ARG0 */
@@ -174,7 +246,24 @@ __jmp_runtime:
 	movq    %r13, R13(%rdi)
 	movq    %r14, R14(%rdi)
 	movq    %r15, R15(%rdi)
-		
+
+	/* kmovq   %k0, K0(%rdi) */
+	kmovq   %k1, K1(%rdi)
+	kmovq   %k2, K2(%rdi)
+	kmovq   %k3, K3(%rdi)
+	kmovq   %k4, K4(%rdi)
+	kmovq   %k5, K5(%rdi)
+	kmovq   %k6, K6(%rdi)
+	kmovq   %k7, K7(%rdi)
+
+	VMOVDQA64 %ymm0,  YMM0(%rdi)  
+	VMOVDQA64 %ymm1,  YMM1(%rdi)
+	VMOVDQA64 %ymm16, YMM16(%rdi) 
+	VMOVDQA64 %ymm17, YMM17(%rdi) 
+	VMOVDQA64 %ymm18, YMM18(%rdi) 
+	VMOVDQA64 %ymm19, YMM19(%rdi) 
+	VMOVDQA64 %ymm20, YMM20(%rdi)
+	
 	/* save ip and stack */
 	movq    (%rsp), %r8
 	movq    %r8, RIP(%rdi)

@@ -14,6 +14,7 @@
 #include <base/log.h>
 #include <runtime/sync.h>
 #include <runtime/thread.h>
+#include <immintrin.h>
 
 #include "defs.h"
 
@@ -483,7 +484,7 @@ static __always_inline void enter_schedule(thread_t *curth)
 
 	spin_lock(&k->lock);
 	now_tsc = rdtsc();
-
+	
 	/* slow path: switch from the uthread stack to the runtime stack */
 	if (k->rq_head == k->rq_tail ||
 	    preempt_cede_needed(k) ||
@@ -511,7 +512,7 @@ static __always_inline void enter_schedule(thread_t *curth)
 
 	update_oldest_tsc(k);
 	spin_unlock(&k->lock);
-
+	
 	/* update exported thread run start time */
 	th->run_start_tsc = perthread_get_stable(last_tsc);
 	ACCESS_ONCE(k->q_ptrs->run_start_tsc) = perthread_get_stable(last_tsc);
@@ -537,6 +538,8 @@ static __always_inline void enter_schedule(thread_t *curth)
 		STAT(LOCAL_RUNS)++;
 	else
 		STAT(REMOTE_RUNS)++;
+
+	// log_info("jmp_thread_direct");
 	jmp_thread_direct(curth, th);
 }
 

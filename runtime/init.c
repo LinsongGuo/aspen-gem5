@@ -80,9 +80,6 @@ static const struct init_entry thread_init_handlers[] = {
 	{__cstr(name), &name ## _init_late}
 
 static const struct init_entry late_init_handlers[] = {
-	/* runtime core */
-	LATE_INITIALIZER(uintr),
-	
 	/* network stack */
 	LATE_INITIALIZER(net),
 	LATE_INITIALIZER(arp),
@@ -90,6 +87,9 @@ static const struct init_entry late_init_handlers[] = {
 	LATE_INITIALIZER(tcp),
 	LATE_INITIALIZER(rcu),
 	LATE_INITIALIZER(directpath),
+
+	/* runtime core */
+	LATE_INITIALIZER(uintr),
 };
 
 static int run_init_handlers(const char *phase,

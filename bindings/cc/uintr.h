@@ -20,4 +20,12 @@ inline void UintrTimerSummary(void) {
     uintr_timer_summary();
 }
 
+inline void SignalUnblock(void) {
+    signal_unblock();
+}
+
+inline void SignalBlock(void) {
+    signal_block();
+}
+
 }  // namespace rt

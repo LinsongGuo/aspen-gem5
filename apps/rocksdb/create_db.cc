@@ -12,7 +12,7 @@ const char DBPath[] = "/tmp/my_db";
 
 int main(int argc, char **argv) {
   rocksdb_t *db;
-  rocksdb_backup_engine_t *be;
+  // rocksdb_backup_engine_t *be;
   rocksdb_options_t *options = rocksdb_options_create();
   // Optimize RocksDB. This is the easiest way to
   // get RocksDB to perform well
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
   rocksdb_options_set_prefix_extractor(options, prefix_extractor);
   rocksdb_options_set_plain_table_factory(options, 0, 10, 0.75, 3);
 
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);  // get # of online cores
+  // long cpus = sysconf(_SC_NPROCESSORS_ONLN);  // get # of online cores
   rocksdb_options_increase_parallelism(options, 0);
   rocksdb_options_optimize_level_style_compaction(options, 0);
   // create the DB if it's not already present
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     // snprintf(key, sizeof(key), "%d", i);
     snprintf(key, 10, "key%d", i);
     size_t keylen = strlen(key);
-    printf("%d %s\n", keylen, key);
+    // printf("%d %s\n", keylen, key);
     //  snprintf(value, sizeof(value), "%lld", dist(e2));
     rocksdb_put(db, writeoptions, key, keylen, value, strlen(value) + 1,
                 &err);

@@ -4,9 +4,11 @@ include $(ROOT_PATH)/build/shared.mk
 # handy for debugging
 print-%  : ; @echo $* = $($*)
 
+new_obj = new.o 
+
 # libshim.a - the shenango shim library
 shim_src = $(wildcard *.c)
-shim_obj = $(shim_src:.c=.o)
+shim_obj = $(new_obj) $(shim_src:.c=.o)
 
 # must be first
 all: libshim.a
@@ -24,6 +26,7 @@ ifneq ($(MAKECMDGOALS),clean)
 endif
 
 CFLAGS += -muintr
+CXXFLAGS += -muintr 
 
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
@@ -32,6 +35,11 @@ CFLAGS += -muintr
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+%.d: %.cc
+	@$(CXX) $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
+%.o: %.cc
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 .PHONY: clean
 clean:
-	rm -f $(obj) $(dep) libshim.a
+	rm -f $(obj) $(dep) libshim.a $(new_obj)

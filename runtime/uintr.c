@@ -9,6 +9,7 @@
 #include <base/log.h>
 #include <base/assert.h>
 #include <base/init.h>
+#include <base/thread.h>
 #include <runtime/uintr.h>
 
 #include "defs.h"
@@ -33,35 +34,12 @@
 #define TOKEN 0
 #define MAX_KTHREADS 16
 
-
 long long UINTR_TIMESLICE = 1000000;
 int uintr_fd[MAX_KTHREADS], kthread_num = 0;
 int uipi_index[MAX_KTHREADS];
 long long start, end;
 long long uintr_sent[MAX_KTHREADS], uintr_recv[MAX_KTHREADS];
 volatile int uintr_timer_flag = 0;
-
-void uintr_summary(void);
-
-// void compute(int cycles) {
-// 	unsigned long long c1 = __rdtsc(), c2 = c1;
-// 	while (c2 - c1 <= cycles) {
-// 		c2 = __rdtsc();
-// 	}
-// }
-
-// void print_entry() {
-// 	printf("entry\n");
-// }
-
-// void print_exit() {
-// 	printf("exit\n");
-// }
-
-// void print_time(long long diff) {
-// 	printf("%lld\n", diff);	
-// }
-
 
 void set_thread_affinity(int core) {
 	cpu_set_t mask;
@@ -70,36 +48,39 @@ void set_thread_affinity(int core) {
 	sched_setaffinity(0, sizeof(mask), &mask);
 }
 
-
 long long now() {
 	struct timespec ts;
 	timespec_get(&ts, TIME_UTC);
 	return ts.tv_sec * 1e9 + ts.tv_nsec;
 }
 
+#ifdef UINTR_PREEMPT
+DEFINE_PERTHREAD(unsigned int, non_reentrance);
+DEFINE_PERTHREAD(unsigned int, uintr_pending);
+
 void __attribute__ ((interrupt))
-     __attribute__((target("general-regs-only", "inline-all-stringops")))
+    __attribute__((target("general-regs-only" /*, "inline-all-stringops"*/)))
      ui_handler(struct __uintr_frame *ui_frame,
 		unsigned long long vector) {
 	
 	// print_entry();
 	
 	++uintr_recv[vector];
-	thread_yield();
-	
+
+#if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (perthread_read(non_reentrance)) {
+        perthread_store(uintr_pending, 1);
+    }
+    else {
+        perthread_store(uintr_pending, 0);
+        thread_yield();
+	    _stui();	
+    }
+#else
+    thread_yield();
 	_stui();	
-
+#endif
 	// print_exit();		
-}
-
-void uintr_timer_start() {
-	uintr_timer_flag = 1;
-	start = now();
-}
-
-void uintr_timer_end() {
-	end = now();
-	uintr_timer_flag = -1;
 }
 
 void* uintr_timer(void*) {
@@ -137,6 +118,16 @@ void* uintr_timer(void*) {
     return NULL;
 }
 
+void uintr_timer_start() {
+	uintr_timer_flag = 1;
+	start = now();
+}
+
+void uintr_timer_end() {
+	end = now();
+	uintr_timer_flag = -1;
+}
+
 int uintr_init(void) {
     memset(uintr_fd, 0, sizeof(uintr_fd));
     memset(uintr_sent, 0, sizeof(uintr_sent));
@@ -161,6 +152,9 @@ int uintr_init_thread(void) {
     }
     uintr_fd[kth_id] = uintr_fd_; 
 
+    perthread_store(non_reentrance, 0);
+    perthread_store(uintr_pending, 0);
+
     return 0;
 }
 
@@ -183,8 +177,7 @@ int uintr_init_late(void) {
     pthread_t timer_thread;
     int ret = pthread_create(&timer_thread, NULL, uintr_timer, NULL);
 	BUG_ON(ret);
-
-    log_info("pthread_create ends");
+    log_info("timer pthread creates");
 }
 
 void uintr_timer_summary(void) {
@@ -200,4 +193,4 @@ void uintr_timer_summary(void) {
     printf("Uintrs_sent: %lld\n", uintr_sent_total);
     printf("Uintrs_received: %lld\n", uintr_recv_total);	
 }
-
+#endif

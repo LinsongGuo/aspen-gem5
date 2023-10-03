@@ -72,6 +72,70 @@ struct thread_tf {
 	uint64_t rax;	/* holds return value */
 	uint64_t rip;	/* instruction pointer */
 	uint64_t rsp;	/* stack pointer */
+
+#ifdef UNSAFE_PREEMPT_SIMDREG_CUSTOM
+	uint64_t k1;
+	uint64_t k2;
+	uint64_t k3;
+	uint64_t k4;
+	uint64_t k5;
+	uint64_t k6;
+	uint64_t k7;
+
+	uint64_t ymm0[4] __attribute__((aligned(32))); 
+	uint64_t ymm1[4] __attribute__((aligned(32)));
+	uint64_t ymm16[4] __attribute__((aligned(32))); 
+	uint64_t ymm17[4] __attribute__((aligned(32))); 
+	uint64_t ymm18[4] __attribute__((aligned(32))); 
+	uint64_t ymm19[4] __attribute__((aligned(32)));
+	uint64_t ymm20[4] __attribute__((aligned(32)));
+	
+#elif defined(UNSAFE_PREEMPT_SIMDREG)
+	/* Mask registers */
+	// uint64_t k0; ko is a hardcoded constant 
+	uint64_t k1;
+	uint64_t k2;
+	uint64_t k3;
+	uint64_t k4;
+	uint64_t k5;
+	uint64_t k6;
+	uint64_t k7;
+	
+	/* AVX (Advanced Vector Extensions) registers */
+	uint64_t ymm0[4] __attribute__((aligned(32))); 
+	uint64_t ymm1[4] __attribute__((aligned(32)));
+	uint64_t ymm2[4] __attribute__((aligned(32)));
+	uint64_t ymm3[4] __attribute__((aligned(32)));
+	uint64_t ymm4[4] __attribute__((aligned(32)));
+	uint64_t ymm5[4] __attribute__((aligned(32)));
+	uint64_t ymm6[4] __attribute__((aligned(32)));
+	uint64_t ymm7[4] __attribute__((aligned(32)));
+	uint64_t ymm8[4] __attribute__((aligned(32)));
+	uint64_t ymm9[4] __attribute__((aligned(32)));
+	uint64_t ymm10[4] __attribute__((aligned(32)));
+	uint64_t ymm11[4] __attribute__((aligned(32)));
+	uint64_t ymm12[4] __attribute__((aligned(32)));
+	uint64_t ymm13[4] __attribute__((aligned(32)));
+	uint64_t ymm14[4] __attribute__((aligned(32)));
+	uint64_t ymm15[4] __attribute__((aligned(32)));
+	
+	uint64_t ymm16[4] __attribute__((aligned(32))); 
+	uint64_t ymm17[4] __attribute__((aligned(32))); 
+	uint64_t ymm18[4] __attribute__((aligned(32))); 
+	uint64_t ymm19[4] __attribute__((aligned(32)));
+	uint64_t ymm20[4] __attribute__((aligned(32)));
+	uint64_t ymm21[4] __attribute__((aligned(32))); 
+	uint64_t ymm22[4] __attribute__((aligned(32))); 
+	uint64_t ymm23[4] __attribute__((aligned(32))); 
+	uint64_t ymm24[4] __attribute__((aligned(32)));
+	uint64_t ymm25[4] __attribute__((aligned(32)));
+	uint64_t ymm26[4] __attribute__((aligned(32))); 
+	uint64_t ymm27[4] __attribute__((aligned(32))); 
+	uint64_t ymm28[4] __attribute__((aligned(32))); 
+	uint64_t ymm29[4] __attribute__((aligned(32)));
+	uint64_t ymm30[4] __attribute__((aligned(32)));
+	uint64_t ymm31[4] __attribute__((aligned(32)));
+#endif 
 };
 
 #define ARG0(tf)        ((tf)->rdi)
@@ -143,6 +207,7 @@ static inline struct stack *stack_alloc(void)
 	void *s = tcache_alloc(perthread_ptr(stack_pt));
 	if (unlikely(!s))
 		return NULL;
+	// memset(s, 0, STACK_PTR_SIZE);
 	return container_of(s, struct stack, usable);
 }
 

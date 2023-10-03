@@ -4,6 +4,9 @@
 #include <base/assert.h>
 #include <base/init.h>
 #include <runtime/sync.h>
+#include <runtime/uintr.h>
+
+#include <x86intrin.h>
 
 static inline bool shim_active(void)
 {
@@ -20,6 +23,22 @@ static inline void shim_preempt_disable(void)
 {
 	if (likely(shim_active()))
 		preempt_disable();
+}
+
+static inline void shim_preempt_uintr_enable(unsigned char uif)
+{
+	if (likely(shim_active())) {
+		preempt_enable();
+		_stui();
+	}
+}
+
+static inline void shim_preempt_uintr_disable(unsigned char uif)
+{
+	if (likely(shim_active())) {
+		preempt_disable();
+		_clui();
+	}
 }
 
 

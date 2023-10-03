@@ -1,96 +1,328 @@
-
-#include <dlfcn.h>
+#include <stdio.h>
+#include <malloc.h>
 #include <stdlib.h>
-
-#include <base/init.h>
-#include <runtime/preempt.h>
-#include <runtime/thread.h>
+#include <pthread.h>
+#include <x86intrin.h>
 
 #include "common.h"
 
-#define HOOK3(fnname, retType, argType1, argType2, argType3)                   \
-	retType fnname(argType1 __a1, argType2 __a2, argType3 __a3)            \
-	{                                                                      \
-		static retType (*real_##fnname)(argType1, argType2, argType3); \
-		if (unlikely(!real_##fnname)) {                                \
-			real_##fnname = dlsym(RTLD_NEXT, #fnname);             \
-		}                                                              \
-		shim_preempt_disable();                                        \
-		retType __t = real_##fnname(__a1, __a2, __a3);                 \
-		shim_preempt_enable();                                         \
-		return __t;                                                    \
-	}
+#include <runtime/smalloc.h>
 
-#define HOOK2(fnname, retType, argType1, argType2)                             \
-	retType fnname(argType1 __a1, argType2 __a2)                           \
-	{                                                                      \
-		static retType (*real_##fnname)(argType1, argType2);           \
-		if (unlikely(!real_##fnname)) {                                \
-			real_##fnname = dlsym(RTLD_NEXT, #fnname);             \
-		}                                                              \
-		shim_preempt_disable();                                        \
-		retType __t = real_##fnname(__a1, __a2);                       \
-		shim_preempt_enable();                                         \
-		return __t;                                                    \
-	}
+void *__real_malloc(size_t size);
+void __real_free(void *ptr);
+void *__real_calloc(size_t nmemb, size_t size);
+void *__real_realloc(void *ptr, size_t size);
+int __real_posix_memalign(void **ptr, size_t alignment, size_t size);
+void *__real_aligned_alloc(size_t alignment, size_t size);
 
-#define HOOK1(fnname, retType, argType1)                                       \
-	retType fnname(argType1 __a1)                                          \
-	{                                                                      \
-		static retType (*real_##fnname)(argType1);                     \
-		if (unlikely(!real_##fnname)) {                                \
-			real_##fnname = dlsym(RTLD_NEXT, #fnname);             \
-		}                                                              \
-		shim_preempt_disable();                                        \
-		retType __t = real_##fnname(__a1);                             \
-		shim_preempt_enable();                                         \
-		return __t;                                                    \
-	}
+#ifndef UNSAFE_PREEMPT_SIMDREG
+void *__real_memcpy(void *dest, const void *src, size_t n);
+int __real_memcmp(const void *s1, const void *s2, size_t n);
+void *__real_memmove(void *dest, const void *src, size_t n);
+void *__real_memset(void *s, int c, size_t n);
+int __real_strcmp(const char *s1, const char *s2);
+int __real_strncmp(const char* str1, const char* str2, size_t num);
+#endif 
 
-#define HOOK1_NORET(fnname, argType1)                                          \
-	void fnname(argType1 __a1)                                             \
-	{                                                                      \
-		static void (*real_##fnname)(argType1);                        \
-		if (unlikely(!real_##fnname)) {                                \
-			real_##fnname = dlsym(RTLD_NEXT, #fnname);             \
-		}                                                              \
-		shim_preempt_disable();                                        \
-		real_##fnname(__a1);                                           \
-		shim_preempt_enable();                                         \
-	}
+void *__wrap_malloc(size_t size) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
 
-HOOK1(malloc, void *, size_t);
-HOOK1_NORET(free, void *);
-HOOK2(realloc, void *, void *, size_t);
-HOOK1_NORET(cfree, void *);
-HOOK2(memalign, void *, size_t, size_t);
-HOOK2(aligned_alloc, void *, size_t, size_t);
-HOOK1(valloc, void *, size_t);
-HOOK1(pvalloc, void *, size_t);
-HOOK3(posix_memalign, int, void **, size_t, size_t);
+    // printf("malloc\n");
+    void *p = NULL;
+    p = __real_malloc(size);
+    
+    // if (likely(shim_active())) {
+    //     p = smalloc(size);
+    //     printf("smalloc: %p\n", p);
+    // } else {
+    //     p = __real_malloc(size);
+    //     printf("__real_malloc: %p\n", p);
+    // }
+    // void *p = __real_malloc(size);
 
-HOOK1_NORET(__libc_free, void *);
-HOOK2(__libc_realloc, void *, void *, size_t);
-HOOK2(__libc_calloc, void *, size_t, size_t);
-HOOK1_NORET(__libc_cfree, void *);
-HOOK2(__libc_memalign, void *, size_t, size_t);
-HOOK1(__libc_valloc, void *, size_t);
-HOOK1(__libc_pvalloc, void *, size_t);
-HOOK3(__posix_memalign, int, void **, size_t, size_t);
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
 
-static void *dummy_calloc(size_t a, size_t b) { return NULL; }
-
-void *calloc(size_t a, size_t b)
-{
-	static void *(*real_calloc)(size_t, size_t);
-	if (unlikely(!real_calloc)) {
-		// Ensure that dlsym's call to calloc doesn't loop infinitely
-		real_calloc = dummy_calloc;
-		barrier();
-		real_calloc = dlsym(RTLD_NEXT, "calloc");
-	}
-	shim_preempt_disable();
-	void *ptr = real_calloc(a, b);
-	shim_preempt_enable();
-	return ptr;
+    return p;
 }
+
+void __wrap_free(void *ptr) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    __real_free(ptr);
+    
+    // printf("free: %p\n", ptr);
+    // if (likely(shim_active())) {
+    //     // printf("sfree: %p\n", ptr);
+    //     sfree(ptr);
+    // } else {
+    //     // printf("__real_free: %p\n", ptr);
+    //     __real_free(ptr);
+    // }
+    // __real_free(ptr);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+}
+
+void *__wrap_calloc(size_t nmemb, size_t size) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+        
+    void *foo = __real_calloc(nmemb, size);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return foo;
+}
+
+void *__wrap_realloc(void *ptr, size_t size) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    void *foo = __real_realloc(ptr, size);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return foo;
+}
+
+int __wrap_posix_memalign(void **ptr, size_t alignment, size_t size) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    int res = __real_posix_memalign(ptr, alignment, size);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+void* __wrap_aligned_alloc(size_t alignment, size_t size) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    void *res = __real_aligned_alloc(alignment, size);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+#if defined(UNSAFE_PREEMPT_CLUI) || defined(UNSAFE_PREEMPT_FLAG)
+void* __wrap_memcpy(void *dest, const void *src, size_t n) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+    
+    // printf("__wrap_memcpy\n");
+    void *res = __real_memcpy(dest, src, n);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+int __wrap_memcmp(const void *s1, const void *s2, size_t n) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    // printf("__wrap_memcmp\n");
+    int res = __real_memcmp(s1, s2, n);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+void *__wrap_memmove(void *dest, const void *src, size_t n) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    // printf("__wrap_memmove\n");
+    void *res = __real_memmove(dest, src, n);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+void *__wrap_memset(void *s, int c, size_t n) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    // printf("__wrap_memset\n");
+    void *res = __real_memset(s, c, n);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+int __wrap_strcmp(const char* str1, const char* str2) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+
+    // printf("__wrap_strcmp\n");
+    int res = __real_strcmp(str1, str2);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+
+int __wrap_strncmp(const char* str1, const char* str2, size_t num) {
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        enter_non_reentrance();
+#endif
+    
+    // printf("__real_strncmp\n");
+    int res = __real_strncmp(str1, str2, num);
+    
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG)
+    if (likely(shim_active()))
+        exit_non_reentrance();
+#endif
+
+    return res;
+}
+#endif

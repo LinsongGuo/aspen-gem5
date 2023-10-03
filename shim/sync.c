@@ -54,31 +54,32 @@ int pthread_mutex_init(pthread_mutex_t *mutex,
 		       const pthread_mutexattr_t *mutexattr)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 
 	NOTSELF(pthread_mutex_init, mutex, mutexattr);
 	struct mutex_with_attr *m = (struct mutex_with_attr *)mutex;
 	mutex_init(&m->mutex);
 	m->magic = INIT_MAGIC;
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
+	
 	// printf("pthread_mutex_lock: %p\n", mutex);
 	NOTSELF(pthread_mutex_lock, mutex);
 	mutex_intialized_check(mutex);
 	mutex_lock((mutex_t *)mutex);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
@@ -92,27 +93,27 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
 int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 	
 	NOTSELF(pthread_mutex_unlock, mutex);
 	mutex_unlock((mutex_t *)mutex);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 	
 	NOTSELF(pthread_mutex_destroy, mutex);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
@@ -180,8 +181,8 @@ int pthread_cond_init(pthread_cond_t *__restrict cond,
 		      const pthread_condattr_t *__restrict cond_attr)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_cond_init, cond, cond_attr);
 	struct condvar_with_attr *cvattr = (struct condvar_with_attr *)cond;
@@ -193,53 +194,53 @@ int pthread_cond_init(pthread_cond_t *__restrict cond,
 		cvattr->clockid = CLOCK_REALTIME;
 	}
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_cond_signal(pthread_cond_t *cond)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_cond_signal, cond);
 	cond_intialized_check(cond);
 	condvar_signal((condvar_t *)cond);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_cond_broadcast(pthread_cond_t *cond)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_cond_broadcast, cond);
 	cond_intialized_check(cond);
 	condvar_broadcast((condvar_t *)cond);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_cond_wait, cond, mutex);
 	cond_intialized_check(cond);
 	condvar_wait((condvar_t *)cond, (mutex_t *)mutex);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
@@ -247,8 +248,8 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 			   const struct timespec *abstime)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	bool done;
 	uint64_t wait_us, now_us;
@@ -268,65 +269,65 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 
 	done = condvar_wait_timed((condvar_t *)cond, (mutex_t *)mutex, wait_us - now_us);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return done ? 0 : ETIMEDOUT;
 }
 
 int pthread_cond_destroy(pthread_cond_t *cond)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_cond_destroy, cond);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_rwlock_destroy(pthread_rwlock_t *r)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_rwlock_destroy, r);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_rwlock_init(pthread_rwlock_t *r, const pthread_rwlockattr_t *attr)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_rwlock_init, r, attr);
 	struct rwmutex_with_attr *rwattr = (struct rwmutex_with_attr *)r;
 	rwattr->magic = INIT_MAGIC;
 	rwmutex_init(&rwattr->rwmutex);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *r)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_rwlock_rdlock, r);
 	rwmutex_intialized_check(r);
 	rwmutex_rdlock((rwmutex_t *)r);
 	
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
@@ -347,28 +348,28 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *r)
 int pthread_rwlock_wrlock(pthread_rwlock_t *r)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_rwlock_wrlock, r);
 	rwmutex_intialized_check(r);
 	rwmutex_wrlock((rwmutex_t *)r);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *r)
 {
 	unsigned uif = _testui();
-	if (uif)
-		_clui();
+	if (likely(uif))
+    	_clui();
 		
 	NOTSELF(pthread_rwlock_unlock, r);
 	rwmutex_unlock((rwmutex_t *)r);
 
-	if (uif)
-		_stui();
+	if (likely(uif))
+    	_stui();
 	return 0;
 }
