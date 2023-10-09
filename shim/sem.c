@@ -18,13 +18,17 @@ struct rt_semaphore {
    with other processes.  */
 int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 {
-	unsigned uif = _testui();
-	if (likely(uif))
-    	_clui();
+	NOTSELF(sem_init, __sem, __pshared, __value);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_disable();
+#endif
 
 	struct rt_semaphore *rt_sem;
-
-	NOTSELF(sem_init, __sem, __pshared, __value);
 
 	if (__pshared) {
 		log_err("No shim support for shared semaphores");
@@ -43,18 +47,38 @@ int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 	rt_sem->value = __value;
 	*(struct rt_semaphore **)__sem = rt_sem;
 
-	if (likely(uif))
-    	_stui();
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_enable();
+#endif
 	return 0;
 }
 
 /* Free resources associated with semaphore object SEM.  */
 int sem_destroy(sem_t *__sem)
 {
-	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 	NOTSELF(sem_destroy, __sem);
+	
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_disable();
+#endif
+
+	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 	BUG_ON(!list_empty(&rt_sem->waiters));
 	sfree(rt_sem);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_enable();
+#endif
 	return 0;
 }
 
@@ -88,14 +112,18 @@ int sem_unlink(const char *__name)
     __THROW.  */
 int sem_wait(sem_t *__sem)
 {
-	unsigned uif = _testui();
-	if (likely(uif))
-    	_clui();
-		
+	NOTSELF(sem_wait, __sem);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // unsigned int old = preempt_get_disable();
+#endif
+
 	thread_t *myth;
 	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
-
-	NOTSELF(sem_wait, __sem);
 
 	spin_lock_np(&rt_sem->lock);
 	if (rt_sem->value > 0) {
@@ -108,8 +136,12 @@ int sem_wait(sem_t *__sem)
     list_add_tail(&rt_sem->waiters, &myth->link);
     thread_park_and_unlock_np(&rt_sem->lock);
 
-	if (likely(uif))
-    	_stui();
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_set(old);
+#endif
     return 0;
 }
 
@@ -119,17 +151,42 @@ int sem_clockwait(sem_t *__restrict __sem,
                           const struct timespec *__restrict __abstime)
 {
 	NOTSELF(sem_clockwait, __sem, clock, __abstime);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_disable();
+#endif
+
+	SELF(sem_clockwait, __sem, clock, __abstime);
 	log_err("sem_clockwait not supported");
 	errno = EINVAL;
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_enable();
+#endif
 	return -1;
 }
 
 /* Test whether SEM is posted.  */
 int sem_trywait(sem_t *__sem)
 {
-	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
-
 	NOTSELF(sem_trywait, __sem);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_disable();
+#endif
+
+	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 
 	bool success = false;
 	spin_lock_np(&rt_sem->lock);
@@ -138,6 +195,14 @@ int sem_trywait(sem_t *__sem)
 		success = true;
 	}
 	spin_unlock_np(&rt_sem->lock);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_enable();
+#endif
+
 	if (success)
 		return 0;
 	errno = EAGAIN;
@@ -148,14 +213,18 @@ int sem_trywait(sem_t *__sem)
 /* Post SEM.  */
 int sem_post(sem_t *__sem)
 {
-	unsigned uif = _testui();
-	if (likely(uif))
-    	_clui();
+	NOTSELF(sem_post, __sem);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_disable();
+#endif
 
 	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 	thread_t *waketh;
-
-	NOTSELF(sem_post, __sem);
 
 	spin_lock_np(&rt_sem->lock);
 	waketh = list_pop(&rt_sem->waiters, thread_t, link);
@@ -168,19 +237,39 @@ int sem_post(sem_t *__sem)
 	if (waketh)
 		thread_ready(waketh);
 
-	if (likely(uif))
-    	_stui();
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_enable();
+#endif
 	return 0;
 }
 
 /* Get current value of SEM and store it in *SVAL.  */
 int sem_getvalue(sem_t *__restrict __sem, int *__restrict __sval)
 {
+	NOTSELF(sem_getvalue, __sem, __sval);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    unsigned char uif = _testui();
+    if (likely(uif))
+        _clui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_disable();
+#endif
+
 	struct rt_semaphore *rt_sem = *(struct rt_semaphore **)__sem;
 
-	NOTSELF(sem_getvalue, __sem, __sval);
 	spin_lock_np(&rt_sem->lock);
 	*__sval = rt_sem->value;
 	spin_unlock_np(&rt_sem->lock);
+
+#if defined(UNSAFE_PREEMPT_CLUI)
+    if (likely(uif))
+        _stui();
+#elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    // preempt_enable();
+#endif
 	return 0;
 }

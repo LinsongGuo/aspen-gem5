@@ -13,6 +13,7 @@
 #include "defs.h"
 
 static pthread_barrier_t init_barrier;
+pthread_t kth_tid[NCPU];
 
 struct init_entry {
 	const char *name;
@@ -169,7 +170,6 @@ int runtime_set_initializers(initializer_fn_t global_fn,
  */
 int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 {
-	pthread_t tid[NCPU];
 	int ret, i;
 
 	ret = ioqueues_init_early();
@@ -210,9 +210,10 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 
 	log_info("spawning %d kthreads", maxks);
 	for (i = 1; i < maxks; i++) {
-		ret = pthread_create(&tid[i], NULL, pthread_entry, NULL);
+		ret = pthread_create(&kth_tid[i], NULL, pthread_entry, NULL);
 		BUG_ON(ret);
 	}
+	kth_tid[0] = pthread_self();
 
 	pthread_barrier_wait(&init_barrier);
 

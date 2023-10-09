@@ -21,18 +21,36 @@ void __mutex_lock(mutex_t *m)
 {
 	thread_t *myth;
 
-	spin_lock_np(&m->waiter_lock);
+	bool enabled = preempt_enabled();
+	if (likely(enabled)) {
+		spin_lock_np(&m->waiter_lock);
+	} 
+	else {
+		/* If preempt already disabled, we don't need to preempt again. */
+		spin_lock(&m->waiter_lock);
+	}
 
 	/* did we race with mutex_unlock? */
 	if (atomic_fetch_and_or(&m->held, WAITER_FLAG) == 0) {
 		atomic_write(&m->held, 1);
-		spin_unlock_np(&m->waiter_lock);
+		if (likely(enabled)) {
+			spin_unlock_np(&m->waiter_lock);
+		} 
+		else {
+			spin_unlock(&m->waiter_lock);
+		}
 		return;
 	}
 
 	myth = thread_self();
 	list_add_tail(&m->waiters, &myth->link);
-	thread_park_and_unlock_np(&m->waiter_lock);
+	thread_park_and_unlock_np(&m->waiter_lock); /* switch occurs here */
+
+	/* Preempt disabled before the call, but preempt must be enabled after the switch.
+	   So we need to disable preempt again here. */
+	if (unlikely(!enabled)) {
+		preempt_disable();
+	}
 }
 
 

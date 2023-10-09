@@ -54,6 +54,16 @@ static inline void shim_spin_lock_np(spinlock_t *l)
 	spin_lock(l);
 }
 
+#define SELF(name, ...)                                                        \
+        {                                                                      \
+                static typeof(name) *fn;                                       \
+                if (!fn) {                                                     \
+                        fn = dlsym(RTLD_NEXT, #name);                          \
+                        BUG_ON(!fn);                                           \
+                }                                                              \
+                return fn(__VA_ARGS__);                                        \
+        }
+
 #define NOTSELF(name, ...)                                                     \
         if (unlikely(!shim_active())) {                                        \
                 static typeof(name) *fn;                                       \
@@ -63,3 +73,4 @@ static inline void shim_spin_lock_np(spinlock_t *l)
                 }                                                              \
                 return fn(__VA_ARGS__);                                        \
         }
+

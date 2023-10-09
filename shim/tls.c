@@ -30,13 +30,14 @@ static __thread struct key_data *kd_noruntime;
 
 int pthread_key_create(pthread_key_t* key_out, void (*destructor)(void*))
 {
+	NOTSELF(pthread_key_create, key_out, destructor);
+
 #if defined(UNSAFE_PREEMPT_CLUI)
     unsigned char uif = _testui();
     if (likely(uif))
         _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        enter_non_reentrance();
+    // preempt_disable();
 #endif
 
 	unsigned int key;
@@ -61,8 +62,7 @@ int pthread_key_create(pthread_key_t* key_out, void (*destructor)(void*))
     if (likely(uif))
         _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        exit_non_reentrance();
+    // preempt_enable();
 #endif
 
 	return 0;
@@ -110,17 +110,15 @@ static struct key_data *get_ts_struct(int key)
 
 void* pthread_getspecific(pthread_key_t key)
 {
+	NOTSELF(pthread_getspecific, key);
+
 #if defined(UNSAFE_PREEMPT_CLUI)
     unsigned char uif = _testui();
     if (likely(uif))
         _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        enter_non_reentrance();
+    // preempt_disable();
 #endif
-
-	// uint64_t start = __rdtsc();
-	//  __asm__ volatile("mfence" ::: "memory");
 
 	// printf("pthread_getspecific\n");
 	struct key_data *kd;
@@ -130,16 +128,11 @@ void* pthread_getspecific(pthread_key_t key)
 
 	kd = get_ts_struct(key);
 
-	// __asm__ volatile("mfence" ::: "memory");
-	// uint64_t end = __rdtsc();
-	// printf("get: %lu\n", end - start);
-	
 #if defined(UNSAFE_PREEMPT_CLUI)
     if (likely(uif))
         _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        exit_non_reentrance();
+    // preempt_enable();
 #endif
 
 	return kd->data;
@@ -147,13 +140,14 @@ void* pthread_getspecific(pthread_key_t key)
 
 int pthread_key_delete(pthread_key_t key)
 {
+	NOTSELF(pthread_key_delete, key);
+
 #if defined(UNSAFE_PREEMPT_CLUI)
     unsigned char uif = _testui();
     if (likely(uif))
         _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        enter_non_reentrance();
+    // preempt_disable();
 #endif
 
 	// printf("pthread_key_delete\n");
@@ -174,8 +168,7 @@ int pthread_key_delete(pthread_key_t key)
     if (likely(uif))
         _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        exit_non_reentrance();
+    // preempt_enable();
 #endif
 
 	return 0;
@@ -183,17 +176,15 @@ int pthread_key_delete(pthread_key_t key)
 
 int pthread_setspecific(pthread_key_t key, const void* value)
 {
+	NOTSELF(pthread_setspecific, key, value);
+	
 #if defined(UNSAFE_PREEMPT_CLUI)
     unsigned char uif = _testui();
     if (likely(uif))
         _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        enter_non_reentrance();
+    // preempt_disable();
 #endif
-
-	// uint64_t start = __rdtsc();
-	// __asm__ volatile("mfence" ::: "memory");
 
 	// printf("pthread_setspecific\n");
 	struct key_data *kd;
@@ -203,17 +194,12 @@ int pthread_setspecific(pthread_key_t key, const void* value)
 
 	kd = get_ts_struct(key);
 	kd->data = (void *)value;
-
-	// __asm__ volatile("mfence" ::: "memory");
-	// uint64_t end = __rdtsc();
-	// printf("set: %lu\n", end - start);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
     if (likely(uif))
         _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (likely(shim_active()))
-        exit_non_reentrance();
+    // preempt_enable();
 #endif
 
 	return 0;

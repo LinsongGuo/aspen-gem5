@@ -13,6 +13,7 @@
 
 /* the current preemption count */
 DEFINE_PERTHREAD(unsigned int, preempt_cnt);
+DEFINE_PERTHREAD(unsigned int, upreempt_cnt);
 
 /* set a flag to indicate a preemption request is pending */
 static void set_preempt_needed(void)
@@ -93,6 +94,7 @@ void preempt(void)
 int preempt_init_thread(void)
 {
 	perthread_store(preempt_cnt, PREEMPT_NOT_PENDING);
+	perthread_store(upreempt_cnt, PREEMPT_NOT_PENDING);
 	return 0;
 }
 

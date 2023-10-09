@@ -14,6 +14,7 @@
 #include <base/log.h>
 #include <runtime/sync.h>
 #include <runtime/thread.h>
+#include <runtime/preempt.h>
 #include <immintrin.h>
 
 #include "defs.h"
@@ -498,6 +499,10 @@ static __always_inline void enter_schedule(thread_t *curth)
 		return;
 	}
 
+	// if (unlikely(k->rq_head - k->rq_tail > 2)) {
+	// 	log_info("rq: %d", k->rq_head - k->rq_tail);
+	// }
+
 	/* fast path: switch directly to the next uthread */
 	STAT(PROGRAM_CYCLES) += now_tsc - perthread_get_stable(last_tsc);
 	perthread_get_stable(last_tsc) = now_tsc;
@@ -521,7 +526,11 @@ static __always_inline void enter_schedule(thread_t *curth)
 	store_release(&k->rcu_gen, k->rcu_gen + 2);
 	ACCESS_ONCE(k->q_ptrs->rcu_gen) = k->rcu_gen;
 	assert((k->rcu_gen & 0x1) == 0x1);
-
+	
+	// if ((perthread_read(preempt_cnt) & ~PREEMPT_NOT_PENDING) != 1) {
+	// 	printf("misuse: %u\n", perthread_read(preempt_cnt) & 7);	
+	// 	printf("misuse\n");
+	// }
 	/* check for misuse of preemption disabling */
 	BUG_ON((perthread_read(preempt_cnt) & ~PREEMPT_NOT_PENDING) != 1);
 
@@ -539,7 +548,6 @@ static __always_inline void enter_schedule(thread_t *curth)
 	else
 		STAT(REMOTE_RUNS)++;
 
-	// log_info("jmp_thread_direct");
 	jmp_thread_direct(curth, th);
 }
 
@@ -919,6 +927,9 @@ static void thread_finish_exit(void)
  */
 void thread_exit(void)
 {
+#ifdef UNSAFE_PREEMPT_CLUI
+	_clui();
+#endif
 	/* can't free the stack we're currently using, so switch */
 	preempt_disable();
 	jmp_runtime_nosave(thread_finish_exit);
@@ -955,6 +966,9 @@ static __noreturn void schedule_start(void)
  */
 void sched_start(void)
 {
+#ifdef UNSAFE_PREEMPT_CLUI
+	_clui();
+#endif
 	preempt_disable();
 	jmp_runtime_nosave(schedule_start);
 }

@@ -11,6 +11,7 @@
 #include <base/init.h>
 #include <base/thread.h>
 #include <runtime/uintr.h>
+#include <runtime/preempt.h>
 
 #include "defs.h"
 #include "sched.h"
@@ -32,7 +33,7 @@
 #define uintr_wait(flags)			syscall(__NR_uintr_wait, flags)
 
 #define TOKEN 0
-#define MAX_KTHREADS 16
+#define MAX_KTHREADS 32
 
 long long UINTR_TIMESLICE = 1000000;
 int uintr_fd[MAX_KTHREADS], kthread_num = 0;
@@ -55,8 +56,8 @@ long long now() {
 }
 
 #ifdef UINTR_PREEMPT
-DEFINE_PERTHREAD(unsigned int, non_reentrance);
-DEFINE_PERTHREAD(unsigned int, uintr_pending);
+// DEFINE_PERTHREAD(unsigned int, non_reentrance);
+// DEFINE_PERTHREAD(unsigned int, uintr_pending);
 
 void __attribute__ ((interrupt))
     __attribute__((target("general-regs-only" /*, "inline-all-stringops"*/)))
@@ -68,30 +69,33 @@ void __attribute__ ((interrupt))
 	++uintr_recv[vector];
 
 #if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (perthread_read(non_reentrance)) {
-        perthread_store(uintr_pending, 1);
-    }
-    else {
-        perthread_store(uintr_pending, 0);
-        thread_yield();
-	    _stui();	
-    }
+    if (!preempt_enabled()) {
+     	set_upreempt_needed();
+		return;
+	}
+    thread_yield();
+    // if (perthread_read(non_reentrance)) {
+    //     perthread_store(uintr_pending, 1);
+    // }
+    // else {
+    //     perthread_store(uintr_pending, 0);
+    //     thread_yield();
+	//     _stui();	
+    // }
 #else
     thread_yield();
-	_stui();	
 #endif
-	// print_exit();		
 }
 
 void* uintr_timer(void*) {
     base_init_thread();
 
-    // set_thread_affinity(12);
-    // uintr_timer_start();
+    set_thread_affinity(54);
     
     int i;
     for (i = 0; i < kthread_num; ++i) {
         uipi_index[i] = uintr_register_sender(uintr_fd[i], 0);
+        log_info("uipi_index %d %d", i, uipi_index[i]);
         if (uipi_index[i] < 0) {
             log_err("failure to register uintr sender");
         }
@@ -111,8 +115,14 @@ void* uintr_timer(void*) {
             for (i = 0; i < kthread_num; ++i) {
                 _senduipi(uipi_index[i]);
                 ++uintr_sent[i];
+                // long long x = now(), y = x;
+                // while (y - x <= 400) {
+                //     y = now();
+                // }
             }
         }
+
+        // log_info("diff %lld", now() - current);
     } 
 
     return NULL;
@@ -140,7 +150,7 @@ int uintr_init(void) {
 
 int uintr_init_thread(void) {
     int kth_id = myk()->kthread_idx;
-    assert(kth_id >= 0 && kth_id < 64);
+    assert(kth_id >= 0 && kth_id < MAX_KTHREADS);
 
 	if (uintr_register_handler(ui_handler, 0)) {
 		log_err("failure to register uintr handler");
@@ -151,9 +161,9 @@ int uintr_init_thread(void) {
 		log_err("failure to create uintr fd");
     }
     uintr_fd[kth_id] = uintr_fd_; 
-
-    perthread_store(non_reentrance, 0);
-    perthread_store(uintr_pending, 0);
+    log_info("uintr_create_fd %d %d", kth_id, uintr_fd[kth_id]);
+    // perthread_store(non_reentrance, 0);
+    // perthread_store(uintr_pending, 0);
 
     return 0;
 }
@@ -178,6 +188,8 @@ int uintr_init_late(void) {
     int ret = pthread_create(&timer_thread, NULL, uintr_timer, NULL);
 	BUG_ON(ret);
     log_info("timer pthread creates");
+
+    return 0;
 }
 
 void uintr_timer_summary(void) {
