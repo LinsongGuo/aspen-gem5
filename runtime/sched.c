@@ -927,9 +927,6 @@ static void thread_finish_exit(void)
  */
 void thread_exit(void)
 {
-#ifdef UNSAFE_PREEMPT_CLUI
-	_clui();
-#endif
 	/* can't free the stack we're currently using, so switch */
 	preempt_disable();
 	jmp_runtime_nosave(thread_finish_exit);
@@ -966,9 +963,6 @@ static __noreturn void schedule_start(void)
  */
 void sched_start(void)
 {
-#ifdef UNSAFE_PREEMPT_CLUI
-	_clui();
-#endif
 	preempt_disable();
 	jmp_runtime_nosave(schedule_start);
 }

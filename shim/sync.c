@@ -56,9 +56,9 @@ int pthread_mutex_init(pthread_mutex_t *mutex,
 	NOTSELF(pthread_mutex_init, mutex, mutexattr);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -68,8 +68,8 @@ int pthread_mutex_init(pthread_mutex_t *mutex,
 	m->magic = INIT_MAGIC;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -81,9 +81,9 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
 	NOTSELF(pthread_mutex_lock, mutex);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // unsigned int old = preempt_get_disable();
 #endif
@@ -93,8 +93,8 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
 	mutex_lock((mutex_t *)mutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_set(old);
 #endif
@@ -106,9 +106,9 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
 	NOTSELF(pthread_mutex_trylock, mutex);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -117,8 +117,8 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
 	int res = mutex_try_lock((mutex_t *)mutex) ? 0 : EBUSY;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -130,9 +130,9 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex)
 	NOTSELF(pthread_mutex_unlock, mutex);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -140,8 +140,8 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex)
 	mutex_unlock((mutex_t *)mutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -154,9 +154,9 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex)
 	NOTSELF(pthread_mutex_destroy, mutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
    //  preempt_disable();
 #endif
@@ -165,8 +165,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex)
 	NOTSELF(pthread_mutex_destroy, mutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -239,9 +239,9 @@ int pthread_cond_init(pthread_cond_t *__restrict cond,
 	NOTSELF(pthread_cond_init, cond, cond_attr);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -256,8 +256,8 @@ int pthread_cond_init(pthread_cond_t *__restrict cond,
 	}
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -269,9 +269,9 @@ int pthread_cond_signal(pthread_cond_t *cond)
 	NOTSELF(pthread_cond_signal, cond);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -280,8 +280,8 @@ int pthread_cond_signal(pthread_cond_t *cond)
 	condvar_signal((condvar_t *)cond);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -293,9 +293,9 @@ int pthread_cond_broadcast(pthread_cond_t *cond)
 	NOTSELF(pthread_cond_broadcast, cond);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -304,8 +304,8 @@ int pthread_cond_broadcast(pthread_cond_t *cond)
 	condvar_broadcast((condvar_t *)cond);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -317,9 +317,9 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 	NOTSELF(pthread_cond_wait, cond, mutex);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -328,8 +328,8 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 	condvar_wait((condvar_t *)cond, (mutex_t *)mutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -342,9 +342,9 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	NOTSELF(pthread_cond_timedwait, cond, mutex, abstime);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -366,8 +366,8 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	done = condvar_wait_timed((condvar_t *)cond, (mutex_t *)mutex, wait_us - now_us);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -379,9 +379,9 @@ int pthread_cond_destroy(pthread_cond_t *cond)
 	NOTSELF(pthread_cond_destroy, cond);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -389,8 +389,8 @@ int pthread_cond_destroy(pthread_cond_t *cond)
 	NOTSELF(pthread_cond_destroy, cond);	
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -402,9 +402,9 @@ int pthread_rwlock_destroy(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_destroy, r);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -412,8 +412,8 @@ int pthread_rwlock_destroy(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_destroy, r);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -425,9 +425,9 @@ int pthread_rwlock_init(pthread_rwlock_t *r, const pthread_rwlockattr_t *attr)
 	NOTSELF(pthread_rwlock_init, r, attr);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -437,8 +437,8 @@ int pthread_rwlock_init(pthread_rwlock_t *r, const pthread_rwlockattr_t *attr)
 	rwmutex_init(&rwattr->rwmutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -450,9 +450,9 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_rdlock, r);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // unsigned int old = preempt_get_disable();
 #endif
@@ -461,8 +461,8 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *r)
 	rwmutex_rdlock((rwmutex_t *)r);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_set(old);
 #endif
@@ -474,9 +474,9 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_tryrdlock, r);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -485,8 +485,8 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *r)
 	int res = rwmutex_try_rdlock((rwmutex_t *)r) ? 0 : EBUSY;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -498,9 +498,9 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_trywrlock, r);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -509,8 +509,8 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *r)
 	int res = rwmutex_try_wrlock((rwmutex_t *)r) ? 0 : EBUSY;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -522,9 +522,9 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_wrlock, r);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // unsigned int old = preempt_get_disable();
 #endif
@@ -533,8 +533,8 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *r)
 	rwmutex_wrlock((rwmutex_t *)r);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_set(old);
 #endif
@@ -546,9 +546,9 @@ int pthread_rwlock_unlock(pthread_rwlock_t *r)
 	NOTSELF(pthread_rwlock_unlock, r);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -556,8 +556,8 @@ int pthread_rwlock_unlock(pthread_rwlock_t *r)
 	rwmutex_unlock((rwmutex_t *)r);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif

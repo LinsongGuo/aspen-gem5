@@ -33,9 +33,9 @@ int pthread_key_create(pthread_key_t* key_out, void (*destructor)(void*))
 	NOTSELF(pthread_key_create, key_out, destructor);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -59,8 +59,8 @@ int pthread_key_create(pthread_key_t* key_out, void (*destructor)(void*))
 	*key_out = key;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -113,9 +113,9 @@ void* pthread_getspecific(pthread_key_t key)
 	NOTSELF(pthread_getspecific, key);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -129,8 +129,8 @@ void* pthread_getspecific(pthread_key_t key)
 	kd = get_ts_struct(key);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -143,9 +143,9 @@ int pthread_key_delete(pthread_key_t key)
 	NOTSELF(pthread_key_delete, key);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -165,8 +165,8 @@ int pthread_key_delete(pthread_key_t key)
 	shim_spin_unlock_np(&key_lock);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -179,9 +179,9 @@ int pthread_setspecific(pthread_key_t key, const void* value)
 	NOTSELF(pthread_setspecific, key, value);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -196,8 +196,8 @@ int pthread_setspecific(pthread_key_t key, const void* value)
 	kd->data = (void *)value;
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif

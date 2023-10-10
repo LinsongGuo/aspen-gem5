@@ -21,9 +21,9 @@ int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 	NOTSELF(sem_init, __sem, __pshared, __value);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -48,8 +48,8 @@ int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 	*(struct rt_semaphore **)__sem = rt_sem;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -62,9 +62,9 @@ int sem_destroy(sem_t *__sem)
 	NOTSELF(sem_destroy, __sem);
 	
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -74,8 +74,8 @@ int sem_destroy(sem_t *__sem)
 	sfree(rt_sem);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -115,9 +115,9 @@ int sem_wait(sem_t *__sem)
 	NOTSELF(sem_wait, __sem);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // unsigned int old = preempt_get_disable();
 #endif
@@ -137,8 +137,8 @@ int sem_wait(sem_t *__sem)
     thread_park_and_unlock_np(&rt_sem->lock);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_set(old);
 #endif
@@ -153,9 +153,9 @@ int sem_clockwait(sem_t *__restrict __sem,
 	NOTSELF(sem_clockwait, __sem, clock, __abstime);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -165,8 +165,8 @@ int sem_clockwait(sem_t *__restrict __sem,
 	errno = EINVAL;
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -179,9 +179,9 @@ int sem_trywait(sem_t *__sem)
 	NOTSELF(sem_trywait, __sem);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -197,8 +197,8 @@ int sem_trywait(sem_t *__sem)
 	spin_unlock_np(&rt_sem->lock);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -216,9 +216,9 @@ int sem_post(sem_t *__sem)
 	NOTSELF(sem_post, __sem);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -238,8 +238,8 @@ int sem_post(sem_t *__sem)
 		thread_ready(waketh);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
@@ -252,9 +252,9 @@ int sem_getvalue(sem_t *__restrict __sem, int *__restrict __sval)
 	NOTSELF(sem_getvalue, __sem, __sval);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    unsigned char uif = _testui();
-    if (likely(uif))
-        _clui();
+    // unsigned char uif = _testui();
+    // if (likely(uif))
+    //     _clui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
@@ -266,8 +266,8 @@ int sem_getvalue(sem_t *__restrict __sem, int *__restrict __sval)
 	spin_unlock_np(&rt_sem->lock);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
-    if (likely(uif))
-        _stui();
+    // if (likely(uif))
+    //     _stui();
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_enable();
 #endif
