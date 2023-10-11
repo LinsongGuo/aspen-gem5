@@ -99,15 +99,15 @@ void* signal_timer(void*) {
         if (current - last >= UINTR_TIMESLICE) {
 			last = current;
             // kill(0, SIGUSR1);
-            // ++signal_sent[0];
             for (i = 0; i < kthread_num; ++i) {
                 // printf("sent: %d", i);
                 pthread_kill(kth_tid[i], SIGUSR1);
+                ++signal_sent[i];
             }
         }
 
-        long long x = now();
-        printf("signal sent: %lld, %lld\n", x - current, (x - current) / kthread_num);
+        // long long x = now();
+        // printf("signal sent: %lld, %lld\n", x - current, (x - current) / kthread_num);
     } 
 
     return NULL;
@@ -179,11 +179,13 @@ void uintr_timer_summary(void) {
 	// printf("start = %lld, end = %lld, time = %lld\n", start, end, end - start);
     printf("Execution: %.9f\n", 1.*(end - start) / 1e9);
     
-    long long uintr_sent_total = 0, uintr_recv_total = 0;
-    uintr_sent_total += signal_sent[0];
-    uintr_recv_total += signal_recv[0];
-    
-    printf("Signals_sent: %lld\n", uintr_sent_total);
-    printf("Signals_received: %lld\n", uintr_recv_total);	
+    long long signal_sent_total = 0, signal_recv_total = 0;
+    int i;
+    for (i = 0; i < kthread_num; ++i) {
+        signal_sent_total += signal_sent[i];
+        signal_recv_total += signal_recv[i];
+    }
+    printf("Signals_sent: %lld\n", signal_sent_total);
+    printf("Signals_received: %lld\n", signal_recv_total);	
 }
 #endif

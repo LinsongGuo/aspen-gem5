@@ -1,9 +1,6 @@
 ROOT_PATH=.
 include $(ROOT_PATH)/build/shared.mk
 
-# for user interrupts support
-CFLAGS += -muintr
-
 DPDK_PATH = dpdk
 CHECKFLAGS = -D__CHECKER__ -Waddress-space
 CFLAGS += -MMD
@@ -30,7 +27,19 @@ runtime_src = $(wildcard runtime/*.c) $(wildcard runtime/net/*.c)
 runtime_src += $(wildcard runtime/net/directpath/*.c)
 runtime_src += $(wildcard runtime/net/directpath/mlx5/*.c)
 runtime_src += $(wildcard runtime/rpc/*.c)
-runtime_asm = $(wildcard runtime/*.S)
+ifeq ($(CONFIG_PREEMPT),signal)
+	runtime_asm = runtime/switch_signal.S
+else
+	ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg)
+	runtime_asm = runtime/switch_simdreg.S
+	else 
+		ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_custom)
+			runtime_asm = runtime/switch_simdreg_custom.S
+		else
+			runtime_asm = runtime/switch.S	
+		endif
+	endif
+endif
 runtime_obj = $(runtime_src:.c=.o) $(runtime_asm:.S=.o)
 
 # test cases

@@ -7,14 +7,14 @@
 #include <base/thread.h>
 #include <base/types.h>
 #include <base/compiler.h>
-#include <runtime/preempt.h>
 #include <iokernel/control.h>
 
 struct thread;
 typedef void (*thread_fn_t)(void *arg);
 typedef struct thread thread_t;
 
-
+extern pthread_t kth_tid[NCPU];
+	
 /*
  * Low-level routines, these are helpful for bindings and synchronization
  * primitives.

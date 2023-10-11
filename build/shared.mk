@@ -47,17 +47,18 @@ MLX5_LIBS += -l:libmlx5.a -l:libibverbs.a -lnl-3 -lnl-route-3 -lrdmacm -lrdma_ut
 
 # parse configuration options
 ifeq ($(CONFIG_DEBUG),y)
-FLAGS += -DDEBUG -rdynamic -O0 -ggdb -mssse3
+FLAGS += -DDEBUG -rdynamic -O0 -ggdb -mssse3 -muintr
 LDFLAGS += -rdynamic
 else
-FLAGS += -DNDEBUG -O3
+# FLAGS += -DNDEBUG -O3
+FLAGS += -DNDEBUG -O3 -mavx2
 ifeq ($(CONFIG_OPTIMIZE),y)
 FLAGS += -march=native -flto -ffast-math
 ifeq ($(CONFIG_CLANG),y)
 LDFLAGS += -flto
 endif
 else
-FLAGS += -mssse3
+FLAGS += -mssse3 -muintr
 endif
 endif
 ifeq ($(CONFIG_MLX5),y)
@@ -81,6 +82,34 @@ RUNTIME_LIBS += $(MLX5_LIBS)
 INC += $(MLX5_INC)
 FLAGS += -DDIRECTPATH
 endif
+ifeq ($(CONFIG_UNSAFE_PREEMPT),flag)
+FLAGS += -DUNSAFE_PREEMPT_FLAG
+endif
+ifeq ($(CONFIG_UNSAFE_PREEMPT),clui)
+FLAGS += -DUNSAFE_PREEMPT_CLUI
+endif
+ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg)
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG
+endif
+ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_custom)
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG_CUSTOM
+endif
+
+ifeq ($(CONFIG_PREEMPT),signal)
+FLAGS += -DSIGNAL_PREEMPT
+endif 
+ifeq ($(CONFIG_PREEMPT),uintr)
+FLAGS += -DUINTR_PREEMPT
+endif 
+
+WRAP_FLAGS = -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc -Wl,-wrap=aligned_alloc -Wl,-wrap=posix_memalign
+ifeq ($(CONFIG_UNSAFE_PREEMPT),flag)
+WRAP_FLAGS += -Wl,-wrap=memcpy -Wl,-wrap=memcmp -Wl,-wrap=memmove -Wl,-wrap=memset -Wl,-wrap=strcmp -Wl,-wrap=strncmp   
+endif 
+ifeq ($(CONFIG_UNSAFE_PREEMPT),clui)
+WRAP_FLAGS += -Wl,-wrap=memcpy -Wl,-wrap=memcmp -Wl,-wrap=memmove -Wl,-wrap=memset -Wl,-wrap=strcmp -Wl,-wrap=strncmp   
+endif 
 
 CFLAGS = -std=gnu11 $(FLAGS)
 CXXFLAGS = -std=gnu++20 $(FLAGS)

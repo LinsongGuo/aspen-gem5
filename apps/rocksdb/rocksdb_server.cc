@@ -68,29 +68,28 @@ struct Payload {
 void rocksdb_init();
 
 static inline void DoScan(rocksdb_readoptions_t *readoptions) {
-  #ifdef SIGNAL_PREEMPT
-		rt::SignalUnblock();
-  #else
-    _stui();
-  #endif
+  // #ifdef SIGNAL_PREEMPT
+	// 	rt::SignalUnblock();
+  // #else
+  //   _stui();
+  // #endif
 
   const char *retr_key;
   size_t klen;
   rocksdb_iterator_t *iter = rocksdb_create_iterator(db, readoptions);
   rocksdb_iter_seek_to_first(iter);
   while (rocksdb_iter_valid(iter)) {
-    // printf("while\n");
     retr_key = rocksdb_iter_key(iter, &klen);
     // log_debug("Scanned key %.*s\n", (int)klen, retr_key);
     rocksdb_iter_next(iter);
   } 
   rocksdb_iter_destroy(iter);
 
-  #ifdef SIGNAL_PREEMPT
-  	rt::SignalBlock();
-  #else
-    _clui();
-  #endif
+  // #ifdef SIGNAL_PREEMPT
+  // 	rt::SignalBlock();
+  // #else
+  //   _clui();
+  // #endif
 }
 
 static inline void DoGet(rocksdb_readoptions_t *readoptions) {
@@ -100,14 +99,11 @@ static inline void DoGet(rocksdb_readoptions_t *readoptions) {
   rocksdb_iter_seek_to_first(iter);
   if (rocksdb_iter_valid(iter)) {
     retr_key = rocksdb_iter_key(iter, &klen);
-    // log_debug("Scanned key %.*s\n", (int)klen, retr_key);
   }
   rocksdb_iter_destroy(iter);
 }
 
 static inline void DoGet(rocksdb_readoptions_t *readoptions, int i) { 
-  // printf("get starts: %s %d\n", keys[i], keys_len[i]);
-
   char* err = NULL;
   size_t valuelen = 0;
   char *returned_value =
@@ -119,8 +115,6 @@ static inline void DoGet(rocksdb_readoptions_t *readoptions, int i) {
     printf("wrong value\n");
   }
   free(returned_value);
-
-  // printf("get ends\n");
 }
 
 uint64_t trace_start[2*1000*1000], trace_end[2*1000*1000], trace_time[2*1000*1000];
@@ -160,13 +154,7 @@ static void HandleRequest(udp_spawn_data *d) {
   if (p->req_type == 11)
     DoScan(readoptions);
   else if (p->req_type == 10) {
-    // trace_start[cnt] = rdtscp(NULL);
     DoGet(readoptions, p->reqsize);
-    // trace_end[cnt++] = rdtscp(NULL);
-    // if (cnt == 1*1000*1000) {
-    //   print();
-    //   exit(-1);
-    // }
   }
   else
     panic("bad req type %u", p->req_type);
@@ -205,15 +193,15 @@ void Get5000() {
     
     assert(!err);
     assert(returned_value != NULL && strncmp (returned_value, values[i], values_len[i]) == 0);
-    // if ( strncmp (returned_value, values[i], values_len[i]) != 0 ) {
-    //   unsigned char uif = _testui();
-    //   if (uif)
-    //     _clui();
-    //   printf("wrong value\n");
-    //   printf("%s %s %d\n", returned_value, values[i], values_len[i]);
-    //   if (uif)
-    //     _stui();
-    // }
+    if ( strncmp (returned_value, values[i], values_len[i]) != 0 ) {
+      unsigned char uif = _testui();
+      if (uif)
+        _clui();
+      printf("wrong value\n");
+      printf("%s %s %d\n", returned_value, values[i], values_len[i]);
+      if (uif)
+        _stui();
+    }
     free(returned_value);
   }
 
@@ -294,8 +282,6 @@ static inline void ScanInit(rocksdb_readoptions_t *readoptions) {
   int idx = 0;
   while (rocksdb_iter_valid(iter)) {
     retr_key = rocksdb_iter_key(iter, &klen);
-    // log_debug("Scanned key %.*s", (int)klen, retr_key);
-    // printf("%s\n", retr_key);
     scan_keys[idx++] = std::string(retr_key, (int)klen);
     rocksdb_iter_next(iter);
   }
@@ -317,7 +303,9 @@ void MainHandler2(void *arg) {
   const int task_num = 2;
   std::string bench_name[task_num] = {"Get5000", "Get5000"};
   bench_type bench_ptr[task_num] = {Get5000, Get5000};
-  
+
+  _stui();
+
   int started = 0, finished = 0;
   for (int i = 0; i < task_num; ++i) {
 		rt::Spawn([&, i]() {
@@ -325,21 +313,23 @@ void MainHandler2(void *arg) {
 
       // printf("call %s()\n", bench_name[i].c_str());
      	if (started < task_num) {
+        rt::Yield();
+			}
+      else {
         rt::UintrTimerStart();
-				rt::Yield();
 			}
 
-#ifdef SIGNAL_PREEMPT
-			rt::SignalUnblock();
-#else
-			_stui();
-#endif
-			bench_ptr[i]();
-#ifdef SIGNAL_PREEMPT
-			rt::SignalBlock();
-#else
-			_clui();
-#endif
+// #ifdef SIGNAL_PREEMPT
+// 			rt::SignalUnblock();
+// #else
+// 			_stui();
+// #endif
+      bench_ptr[i]();
+// #ifdef SIGNAL_PREEMPT
+// 			rt::SignalBlock();
+// #else
+// 			_clui();
+// #endif
 			
       finished += 1;
 			if (finished == task_num) {
@@ -352,6 +342,7 @@ void MainHandler2(void *arg) {
 	}
 
   wg.Wait();
+  _clui();
 }
 
 void MainHandler3(void *arg) {
@@ -456,8 +447,11 @@ void MainHandler4(void *arg) {
 	}
 
   rt::WaitGroup wg(1);
-  int task_num = 100, cnt = 0;
+  int task_num = 30, cnt = 0;
+
   rt::UintrTimerStart();
+  _stui();
+
   uint64_t start = rdtscp(NULL);
   barrier();
   for (int i = 0; i < task_num; ++i) {
@@ -472,8 +466,7 @@ void MainHandler4(void *arg) {
       
       cnt++;
       if (cnt == task_num) {
-        rt::UintrTimerEnd();
-        rt::UintrTimerSummary();
+        // rt::UintrTimerEnd();
         wg.Done();
       }
 		});
@@ -484,6 +477,10 @@ void MainHandler4(void *arg) {
   uint64_t end = rdtscp(NULL);
   unsigned long long total = end - start;
 
+  _clui();
+  rt::UintrTimerEnd();
+  rt::UintrTimerSummary();
+        
   fprintf(stderr, "stats for %u iterations (Scan): \n", cnt);
   fprintf(stderr, "avg: %0.3f\n",
           (double)total / cnt / (double)cycles_per_us);
@@ -545,7 +542,8 @@ void MainHandler(void *arg) {
           (double)durations2[i * 999 / 1000] / (double)cycles_per_us);
 
   rt::UintrTimerStart();
- 
+  _stui();
+  
   udpspawner_t *s;
   int ret = udp_create_spawner(listen_addr, HandleRequest, &s);
   if (ret) panic("ret %d", ret);
@@ -583,7 +581,6 @@ void rocksdb_init() {
 }
 
 int main(int argc, char *argv[]) {
-  printf("######### main\n");
   srand(time(NULL));
   
   int ret;
@@ -599,7 +596,7 @@ int main(int argc, char *argv[]) {
 	rt::SignalBlock();
 #endif
 
-  ret = runtime_init(argv[1], MainHandler2, NULL);
+  ret = runtime_init(argv[1], MainHandler, NULL);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;
