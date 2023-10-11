@@ -41,8 +41,6 @@ ifneq ($(MAKECMDGOALS),clean)
 -include $(dep)   # include all dep files in the makefile
 endif
 
-# CXXFLAGS += -muintr 
-# CFLAGS += -muintr
 %.d: %.cc
 	@$(CXX) $(CXXFLAGS) $< -MM -MT $(@:.d=.o) >$@
 %.o: %.cc
