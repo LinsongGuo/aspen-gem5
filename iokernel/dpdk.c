@@ -231,14 +231,15 @@ int dpdk_init(void)
 	sprintf(buf, "%d", sched_dp_core);
 	ARGV(buf);
 	ARGV("--socket-mem=128");
-
+	log_info("##### cfg.vfio_directpath: %d", cfg.vfio_directpath);
+	log_info("##### nic_pci_addr_str: %s", nic_pci_addr_str);
 	if (cfg.vfio_directpath) {
 		ARGV("--vdev=net_tap0");
 		ARGV("--allow");
 		ARGV("0000:00:00.0");
 	} else if (nic_pci_addr_str) {
-		ARGV("--allow");
-		ARGV(nic_pci_addr_str);
+		// ARGV("--allow");
+		// ARGV(nic_pci_addr_str);
 	} else {
 		ARGV("--vdev=net_tap0");
 	}
@@ -248,6 +249,12 @@ int dpdk_init(void)
 		ARGV(dpdk_argv[i]);
 
 #undef ARGV
+
+
+	log_info("dpdk arg:");
+	for (i = 0; i < argc; i++)
+		printf("%s ", argv[i]);
+	printf("\n");
 
 	/* initialize the Environment Abstraction Layer (EAL) */
 	ret = rte_eal_init(argc, argv);

@@ -55,3 +55,5 @@ extern void set_uthread_specific(uint64_t val);
 extern void thread_yield(void);
 extern int thread_spawn(thread_fn_t fn, void *arg);
 extern void thread_exit(void) __noreturn;
+
+extern void uintr_timer_upd(int kidx);

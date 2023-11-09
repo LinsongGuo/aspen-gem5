@@ -86,6 +86,8 @@ void* signal_timer(void*) {
     base_init_thread();
     signal_block();
 
+    set_thread_affinity(55);
+
     int i;
     long long last = now(), current;
 	while (signal_timer_flag != -1) {
@@ -99,7 +101,39 @@ void* signal_timer(void*) {
         if (current - last >= UINTR_TIMESLICE) {
 			last = current;
             // kill(0, SIGUSR1);
-            for (i = 0; i < kthread_num; ++i) {
+            for (i = 0; i < kthread_num / 2; ++i) {
+                // printf("sent: %d", i);
+                pthread_kill(kth_tid[i], SIGUSR1);
+                ++signal_sent[i];
+            }
+        }
+
+        // long long x = now();
+        // printf("signal sent: %lld, %lld\n", x - current, (x - current) / kthread_num);
+    } 
+
+    return NULL;
+}
+
+void* signal_timer2(void*) {
+    signal_block();
+
+    set_thread_affinity(53);
+
+    int i;
+    long long last = now(), current;
+	while (signal_timer_flag != -1) {
+        current = now();
+		
+		if (!signal_timer_flag) {
+			last = current;
+			continue;
+		}
+
+        if (current - last >= UINTR_TIMESLICE) {
+			last = current;
+            // kill(0, SIGUSR1);
+            for (i = kthread_num / 2; i < kthread_num; ++i) {
                 // printf("sent: %d", i);
                 pthread_kill(kth_tid[i], SIGUSR1);
                 ++signal_sent[i];
@@ -128,7 +162,9 @@ int uintr_init(void) {
     memset(signal_sent, 0, sizeof(signal_sent));
     memset(signal_recv, 0, sizeof(signal_recv));
 
-    UINTR_TIMESLICE = atoi(getenv("UINTR_TIMESLICE")) * 1000L;
+    // UINTR_TIMESLICE = atoi(getenv("UINTR_TIMESLICE")) * 1000L;
+    UINTR_TIMESLICE = 20 * 1000L;
+	// UINTR_TIMESLICE = 1000000000L * 1000L;
 	log_info("UINTR_TIMESLICE: %lld us", UINTR_TIMESLICE / 1000);
     return 0;
 }
@@ -173,6 +209,11 @@ int uintr_init_late(void) {
     int ret = pthread_create(&timer_thread, NULL, signal_timer, NULL);
 	BUG_ON(ret);
     log_info("timer pthread creates");
+
+    pthread_t timer_thread2;
+    int ret2 = pthread_create(&timer_thread2, NULL, signal_timer2, NULL);
+	BUG_ON(ret2);
+    log_info("timer pthread2 creates");
 }
 
 void uintr_timer_summary(void) {

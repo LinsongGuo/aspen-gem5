@@ -88,7 +88,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
     // unsigned int old = preempt_get_disable();
 #endif
 	
-	// printf("pthread_mutex_lock: %p\n", mutex);
+	// printf("pthread_mutex_lock\n");
 	mutex_intialized_check(mutex);
 	mutex_lock((mutex_t *)mutex);
 
@@ -113,6 +113,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
     // preempt_disable();
 #endif
 
+    // printf("pthread_mutex_trylock\n");
 	mutex_intialized_check(mutex);
 	int res = mutex_try_lock((mutex_t *)mutex) ? 0 : EBUSY;
 
@@ -137,6 +138,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex)
     // preempt_disable();
 #endif
 	
+    // printf("pthread_mutex_unlock\n");
 	mutex_unlock((mutex_t *)mutex);
 
 #if defined(UNSAFE_PREEMPT_CLUI)
@@ -200,38 +202,38 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier)
 	return 0;
 }
 
-int pthread_spin_destroy(pthread_spinlock_t *lock)
-{
-	NOTSELF(pthread_spin_destroy, lock);
-	return 0;
-}
+// int pthread_spin_destroy(pthread_spinlock_t *lock)
+// {
+// 	NOTSELF(pthread_spin_destroy, lock);
+// 	return 0;
+// }
 
-int pthread_spin_init(pthread_spinlock_t *lock, int pshared)
-{
-	NOTSELF(pthread_spin_init, lock, pshared);
-	spin_lock_init((spinlock_t *)lock);
-	return 0;
-}
+// int pthread_spin_init(pthread_spinlock_t *lock, int pshared)
+// {
+// 	NOTSELF(pthread_spin_init, lock, pshared);
+// 	spin_lock_init((spinlock_t *)lock);
+// 	return 0;
+// }
 
-int pthread_spin_lock(pthread_spinlock_t *lock)
-{
-	NOTSELF(pthread_spin_lock, lock);
-	spin_lock_np((spinlock_t *)lock);
-	return 0;
-}
+// int pthread_spin_lock(pthread_spinlock_t *lock)
+// {
+// 	NOTSELF(pthread_spin_lock, lock);
+// 	spin_lock_np((spinlock_t *)lock);
+// 	return 0;
+// }
 
-int pthread_spin_trylock(pthread_spinlock_t *lock)
-{
-	NOTSELF(pthread_spin_trylock, lock);
-	return spin_try_lock_np((spinlock_t *)lock) ? 0 : EBUSY;
-}
+// int pthread_spin_trylock(pthread_spinlock_t *lock)
+// {
+// 	NOTSELF(pthread_spin_trylock, lock);
+// 	return spin_try_lock_np((spinlock_t *)lock) ? 0 : EBUSY;
+// }
 
-int pthread_spin_unlock(pthread_spinlock_t *lock)
-{
-	NOTSELF(pthread_spin_unlock, lock);
-	spin_unlock_np((spinlock_t *)lock);
-	return 0;
-}
+// int pthread_spin_unlock(pthread_spinlock_t *lock)
+// {
+// 	NOTSELF(pthread_spin_unlock, lock);
+// 	spin_unlock_np((spinlock_t *)lock);
+// 	return 0;
+// }
 
 int pthread_cond_init(pthread_cond_t *__restrict cond,
 		      const pthread_condattr_t *__restrict cond_attr)
@@ -275,7 +277,8 @@ int pthread_cond_signal(pthread_cond_t *cond)
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
-		
+    
+    // printf("pthread_cond_signal\n");
 	cond_intialized_check(cond);
 	condvar_signal((condvar_t *)cond);
 
@@ -300,6 +303,7 @@ int pthread_cond_broadcast(pthread_cond_t *cond)
     // preempt_disable();
 #endif
 		
+    // printf("pthread_cond_broadcast\n");
 	cond_intialized_check(cond);
 	condvar_broadcast((condvar_t *)cond);
 
@@ -323,7 +327,8 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     // preempt_disable();
 #endif
-		
+	
+    // printf("pthread_cond_wait\n");
 	cond_intialized_check(cond);
 	condvar_wait((condvar_t *)cond, (mutex_t *)mutex);
 
@@ -457,6 +462,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *r)
     // unsigned int old = preempt_get_disable();
 #endif
 		
+    // printf("pthread_rwlock_rdlock\n");
 	rwmutex_intialized_check(r);
 	rwmutex_rdlock((rwmutex_t *)r);
 	
@@ -481,6 +487,7 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *r)
     // preempt_disable();
 #endif
 
+    // printf("pthread_rwlock_tryrdlock\n");
 	rwmutex_intialized_check(r);
 	int res = rwmutex_try_rdlock((rwmutex_t *)r) ? 0 : EBUSY;
 
@@ -505,6 +512,7 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *r)
     // preempt_disable();
 #endif
 
+    // printf("pthread_rwlock_trywrlock\n");
 	rwmutex_intialized_check(r);
 	int res = rwmutex_try_wrlock((rwmutex_t *)r) ? 0 : EBUSY;
 
@@ -529,6 +537,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *r)
     // unsigned int old = preempt_get_disable();
 #endif
 		
+    // printf("pthread_rwlock_wrlock\n");
 	rwmutex_intialized_check(r);
 	rwmutex_wrlock((rwmutex_t *)r);
 

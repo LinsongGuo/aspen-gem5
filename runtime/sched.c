@@ -88,6 +88,8 @@ static __noreturn void jmp_thread(thread_t *th)
 			cpu_relax();
 	}
 	th->thread_running = true;
+	uintr_timer_upd(myk()->kthread_idx);
+	barrier();
 	__jmp_thread(&th->tf);
 }
 
@@ -104,6 +106,9 @@ static void jmp_thread_direct(thread_t *oldth, thread_t *newth)
 	assert_preempt_disabled();
 	assert(newth->thread_ready);
 
+	// uintr_timer_upd(myk()->kthread_idx);
+	// barrier();
+	
 	perthread_store(__self, newth);
 	newth->thread_ready = false;
 	if (unlikely(load_acquire(&newth->thread_running))) {
@@ -112,6 +117,7 @@ static void jmp_thread_direct(thread_t *oldth, thread_t *newth)
 			cpu_relax();
 	}
 	newth->thread_running = true;
+	// log_info("myk()->kthread_idx: %d", myk()->kthread_idx);
 	__jmp_thread_direct(&oldth->tf, &newth->tf, &oldth->thread_running);
 }
 
@@ -391,19 +397,19 @@ again:
 		goto done;
 	}
 
-	/* then try to steal from a sibling kthread */
-	sibling = cpu_map[l->curr_cpu].sibling_core;
-	r = cpu_map[sibling].recent_kthread;
-	if (r && r != l && steal_work(l, r))
-		goto done;
+	// /* then try to steal from a sibling kthread */
+	// sibling = cpu_map[l->curr_cpu].sibling_core;
+	// r = cpu_map[sibling].recent_kthread;
+	// if (r && r != l && steal_work(l, r))
+	// 	goto done;
 
-	/* try to steal from every kthread */
-	start_idx = rand_crc32c((uintptr_t)l);
-	for (i = 0; i < maxks; i++) {
-		int idx = (start_idx + i) % maxks;
-		if (ks[idx] != l && steal_work(l, ks[idx]))
-			goto done;
-	}
+	// /* try to steal from every kthread */
+	// start_idx = rand_crc32c((uintptr_t)l);
+	// for (i = 0; i < maxks; i++) {
+	// 	int idx = (start_idx + i) % maxks;
+	// 	if (ks[idx] != l && steal_work(l, ks[idx]))
+	// 		goto done;
+	// }
 
 	/* recheck for local softirqs one last time */
 	if (softirq_run_locked(l)) {
@@ -475,6 +481,7 @@ done:
 static __always_inline void enter_schedule(thread_t *curth)
 {
 	struct kthread *k = myk();
+	// log_info("k %u", k->kthread_idx);
 	thread_t *th;
 	uint64_t now_tsc;
 
@@ -547,7 +554,9 @@ static __always_inline void enter_schedule(thread_t *curth)
 		STAT(LOCAL_RUNS)++;
 	else
 		STAT(REMOTE_RUNS)++;
-
+	
+	// uintr_timer_upd(myk()->kthread_idx);
+	// barrier();
 	jmp_thread_direct(curth, th);
 }
 
@@ -938,6 +947,7 @@ void thread_exit(void)
  */
 static __noreturn void schedule_start(void)
 {
+	log_info("sizeof(thread_tf): %ld", sizeof(struct thread_tf));
 	struct kthread *k = myk();
 
 	/*

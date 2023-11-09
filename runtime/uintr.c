@@ -15,6 +15,9 @@
 
 #include "defs.h"
 #include "sched.h"
+#ifdef DIRECTPATH
+#include "net/directpath/mlx5/mlx5.h"
+#endif 
 
 #ifndef __NR_uintr_register_handler
 #define __NR_uintr_register_handler	471
@@ -87,13 +90,36 @@ void __attribute__ ((interrupt))
 #endif
 }
 
+bool pending_uthreads(int kidx) {
+#ifdef DIRECTPATH
+    return ACCESS_ONCE(ks[kidx]->rq_tail) != ACCESS_ONCE(ks[kidx]->rq_head);
+#else
+    return true;
+#endif
+}
+
+bool pending_cqe(int kidx) {
+#ifdef DIRECTPATH
+    return mlx5_rxq_pending(&rxqs[kidx]);
+#else
+    return true;
+#endif
+}
+
+long long last[MAX_KTHREADS];
+void uintr_timer_upd(int kidx) {
+    ACCESS_ONCE(last[kidx]) = now();
+    // last[kidx] = now();
+}
+
 void* uintr_timer(void*) {
     base_init_thread();
 
-    set_thread_affinity(54);
+    set_thread_affinity(55);
     
+    log_info("kthread_num: %d, maxks: %d", kthread_num, maxks);
     int i;
-    for (i = 0; i < kthread_num; ++i) {
+    for (i = 0; i < maxks; ++i) {
         uipi_index[i] = uintr_register_sender(uintr_fd[i], 0);
         log_info("uipi_index %d %d", i, uipi_index[i]);
         if (uipi_index[i] < 0) {
@@ -101,28 +127,50 @@ void* uintr_timer(void*) {
         }
     }	    
 
-    long long last = now(), current;
-	while (uintr_timer_flag != -1) {
-        current = now();
+    // long long last = now(), current;
+	// while (uintr_timer_flag != -1) {
+    //     current = now();
 		
-		if (!uintr_timer_flag) {
-			last = current;
-			continue;
-		}
+	// 	if (!uintr_timer_flag) {
+	// 		last = current;
+	// 		continue;
+	// 	}
 
-        if (current - last >= UINTR_TIMESLICE) {
-			last = current;
-            for (i = 0; i < kthread_num; ++i) {
-                _senduipi(uipi_index[i]);
-                ++uintr_sent[i];
-                // long long x = now(), y = x;
-                // while (y - x <= 400) {
-                //     y = now();
+    //     if (current - last >= UINTR_TIMESLICE) {
+	// 		last = current;
+    //         for (i = 0; i < maxks; ++i) {
+    //             // if (ACCESS_ONCE(ks[i]->rq_tail) != ACCESS_ONCE(ks[i]->rq_head)) {
+    //             // if (pending_uthreads(i) || pending_cqe(i)) {
+    //                 // log_info("uipi %d", i);
+    //                 _senduipi(uipi_index[i]);
+    //                 ++uintr_sent[i];
+    //             // }
+    //         }
+    //     }
+    // } 
+
+    long long current;
+    for (i = 0; i < maxks; ++i) {
+        ACCESS_ONCE(last[i]) = now();
+    }
+    while (uintr_timer_flag != -1) {
+        for (i = 0; i < maxks; ++i) {
+            current = now();
+		
+            if (!uintr_timer_flag) {
+                ACCESS_ONCE(last[i]) = current;
+                continue;
+            }   
+            if (current - ACCESS_ONCE(last[i]) >= UINTR_TIMESLICE) {
+                // if (pending_uthreads(i) || pending_cqe(i)) {
+                    printf("uipi %d\n", i);
+                    _senduipi(uipi_index[i]);
+                    ++uintr_sent[i];
+                    // printf("%d: %lld - %lld (%d) = %lld\n", i, current, last_sent[i], last_sent[i] == last[i], current - last_sent[i]);
+                    ACCESS_ONCE(last[i]) = current;
                 // }
-            }
+            }   
         }
-
-        // log_info("diff %lld", now() - current);
     } 
 
     return NULL;
@@ -143,7 +191,10 @@ int uintr_init(void) {
     memset(uintr_sent, 0, sizeof(uintr_sent));
     memset(uintr_recv, 0, sizeof(uintr_recv));
 
-    UINTR_TIMESLICE = atoi(getenv("UINTR_TIMESLICE")) * 1000L;
+    // UINTR_TIMESLICE = atoi(getenv("UINTR_TIMESLICE")) * 1000L;
+	UINTR_TIMESLICE = 10 * 1000L;
+    // UINTR_TIMESLICE = 5 * 1000L;
+    // UINTR_TIMESLICE = 1000000000L * 1000L;
 	log_info("UINTR_TIMESLICE: %lld us", UINTR_TIMESLICE / 1000);
     return 0;
 }

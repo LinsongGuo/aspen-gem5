@@ -89,6 +89,27 @@ struct thread_tf {
 	uint64_t ymm18[4] __attribute__((aligned(32))); 
 	uint64_t ymm19[4] __attribute__((aligned(32)));
 	uint64_t ymm20[4] __attribute__((aligned(32)));
+
+#elif defined(UNSAFE_PREEMPT_SIMDREG_LINPACK)
+	uint64_t k1;
+	uint64_t k2;
+	uint64_t k3;
+	uint64_t k4;
+	uint64_t k5;
+	uint64_t k6;
+	uint64_t k7;
+
+	uint64_t ymm0[4] __attribute__((aligned(32))); 
+	uint64_t ymm1[4] __attribute__((aligned(32)));
+	uint64_t ymm2[4] __attribute__((aligned(32))); 
+	uint64_t ymm3[4] __attribute__((aligned(32))); 
+	uint64_t ymm4[4] __attribute__((aligned(32))); 
+	uint64_t ymm5[4] __attribute__((aligned(32)));
+	uint64_t ymm6[4] __attribute__((aligned(32)));
+	uint64_t ymm7[4] __attribute__((aligned(32)));
+	// uint64_t ymm8[4] __attribute__((aligned(32)));
+	// uint64_t ymm9[4] __attribute__((aligned(32)));
+	// uint64_t ymm10[4] __attribute__((aligned(32)));
 	
 #elif defined(UNSAFE_PREEMPT_SIMDREG)
 	/* Mask registers */
