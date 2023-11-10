@@ -90,13 +90,13 @@ long long linpack() {
 */
   a = r8mat_gen ( LDA, N );
 
-  _clui();
+  // _clui();
   b = ( double * ) malloc ( N * sizeof ( double ) );
   ipvt = ( int * ) malloc ( N * sizeof ( int ) );
   resid = ( double * ) malloc ( N * sizeof ( double ) );
   rhs = ( double * ) malloc ( N * sizeof ( double ) );
   x = ( double * ) malloc ( N * sizeof ( double ) );
-  _stui();
+  // _stui();
 
   a_max = 0.0;
   for ( j = 0; j < N; j++ )
@@ -124,18 +124,18 @@ long long linpack() {
 
   info = dgefa ( a, LDA, N, ipvt );
 
-  _clui();
   if ( info != 0 )
   {
+    _clui();
     printf ( "\n" );
     printf ( "LINPACK_BENCH - Fatal error!\n" );
     printf ( "  The matrix A is apparently singular.\n" );
     printf ( "  Abnormal end of execution.\n" );
+    _stui();
     exit(-1);
     return 1;
   }
-  _stui();
-
+  
   t2 = cpu_time ( );
   time[0] = t2 - t1;
 
@@ -149,9 +149,7 @@ long long linpack() {
 
   total = time[0] + time[1];
  
-  _clui();
   free ( a );
-  _stui();
 
 /*
   Compute a residual to verify results.
@@ -209,12 +207,11 @@ long long linpack() {
   time[4] = 2.0 / time[3];
   time[5] = total / cray;
 
-  // printf ( "\n" );
   // _clui();
+  // printf ( "\n" );
   // printf ( "     Norm. Resid      Resid           MACHEP         X[1]          X[N]\n" );
   // printf ( "\n" );
   // printf ( "  %14f  %14f  %14e  %14f  %14f\n", residn, resid_max, eps, b[0], b[N-1] );
-  // _stui();
   // printf ( "\n" );
   // printf ( "      Factor     Solve      Total            Unit      Cray-Ratio\n" );
   // printf ( "\n" );
@@ -223,15 +220,14 @@ long long linpack() {
   // printf ( "\n" );
   // printf ( "Unrolled Double  Precision %9f Mflops\n", time[3]);
   // printf ( "\n" );
-
-  _clui();
+  // _stui();
+  
   free ( a );
   free ( b );
   free ( ipvt );
   free ( resid );
   free ( rhs );
   free ( x );
-  _stui();
 /*
   Terminate.
 */
@@ -1148,16 +1144,13 @@ double *r8mat_gen ( int lda, int n )
     Output, double R8MAT_GEN[LDA*N], the N by N matrix.
 */
 {
-  _clui();
   double *a;
   int i;
   int init[4] = { 1, 2, 3, 1325 };
   int j;
 
-  // _clui();
   a = ( double * ) malloc ( lda * n * sizeof ( double ) );
-  // _stui();
-
+  
   for ( j = 1; j <= n; j++ )
   {
     for ( i = 1; i <= n; i++ )
@@ -1166,7 +1159,6 @@ double *r8mat_gen ( int lda, int n )
     }
   }
   
-  _stui();
   return a;
 }
 /******************************************************************************/

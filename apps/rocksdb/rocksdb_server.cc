@@ -65,6 +65,13 @@ struct Payload {
   uint32_t run_ns;
 };
 
+void compute(unsigned long long cycles) {
+	unsigned long long c1 = __rdtsc(), c2 = c1;
+	while (c2 - c1 <= cycles) {
+		c2 = __rdtsc();
+	}
+}
+
 void rocksdb_init();
 
 static inline void DoScan(rocksdb_readoptions_t *readoptions) {
@@ -154,6 +161,7 @@ static void HandleRequest(udp_spawn_data *d) {
   if (p->req_type == 11)
     DoScan(readoptions);
   else if (p->req_type == 10) {
+    // compute(1000);
     DoGet(readoptions, p->reqsize);
   }
   else
@@ -167,6 +175,37 @@ static void HandleRequest(udp_spawn_data *d) {
   ssize_t wret = udp_respond(&rp, sizeof(rp), d);
   if (unlikely(wret <= 0)) panic("wret");
   udp_spawn_data_release(d->release_data);
+}
+
+static void HandleLoop(udpconn_t *c) {
+  // printf("HandleLoop: %p\n", c);
+  char buf[20];
+	ssize_t ret, len;
+	struct netaddr addr;
+
+	while (true) {
+		ret = udp_read_from(c, buf, sizeof(Payload), &addr);
+    assert(ret == sizeof(Payload));
+    // printf("read ret = %ld\n", ret);
+    
+    const Payload *p = static_cast<const Payload *>((void*)buf);
+    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+    if (p->req_type == 11)
+      DoScan(readoptions);
+    else if (p->req_type == 10) {
+      // compute(1000);
+      DoGet(readoptions, p->reqsize);
+    }
+    else
+      panic("bad req type %u", p->req_type);
+    rocksdb_readoptions_destroy(readoptions);
+    
+    Payload rp = *p;
+    rp.run_ns = 0;
+    ret = udp_write_to(c, &rp, sizeof(Payload), &addr);
+    assert(ret == sizeof(Payload));
+    // printf("write ret = %ld\n", ret);
+	}
 }
 
 void Get5000() {
@@ -290,7 +329,7 @@ static inline void ScanInit(rocksdb_readoptions_t *readoptions) {
 
 typedef void (*bench_type)(void);
 
-void MainHandler2(void *arg) {
+void MainHandler_simple(void *arg) {
   srand(123);
 
   rt::WaitGroup wg(1);
@@ -434,7 +473,10 @@ void MainHandler3(void *arg) {
           (double)first / (double)cycles_per_us);
 }
 
-void MainHandler4(void *arg) {
+void MainHandler_scan(void *arg) {
+  bool preempt_flag = *((bool*) arg);
+  printf("preempt_flag: %d\n", preempt_flag);
+
   cycles_per_us = 2000;
   init_key_value();
   rocksdb_init();
@@ -447,12 +489,14 @@ void MainHandler4(void *arg) {
 	}
 
   rt::WaitGroup wg(1);
-  int task_num = 30, cnt = 0;
+  int task_num = 32, cnt = 0;
 
-  rt::UintrTimerStart();
-  _stui();
+  if (preempt_flag) {
+    rt::UintrTimerStart();
+    _stui();
+  }
 
-  uint64_t start = rdtscp(NULL);
+  uint64_t start = rdtscp(NULL), end;
   barrier();
   for (int i = 0; i < task_num; ++i) {
 		rt::Spawn([&, i]() {
@@ -466,21 +510,21 @@ void MainHandler4(void *arg) {
       
       cnt++;
       if (cnt == task_num) {
-        // rt::UintrTimerEnd();
+        end = rdtscp(NULL);
+        barrier();
         wg.Done();
       }
 		});
 	}
           
   wg.Wait();
-  barrier();
-  uint64_t end = rdtscp(NULL);
   unsigned long long total = end - start;
 
-  _clui();
-  rt::UintrTimerEnd();
-  rt::UintrTimerSummary();
-        
+  if (preempt_flag) {
+    _clui();
+    rt::UintrTimerEnd();
+    rt::UintrTimerSummary();
+  }
   fprintf(stderr, "stats for %u iterations (Scan): \n", cnt);
   fprintf(stderr, "avg: %0.3f\n",
           (double)total / cnt / (double)cycles_per_us);
@@ -552,6 +596,92 @@ void MainHandler(void *arg) {
   w.Wait();
 }
 
+void MainHandler_udpconn(void *arg) {
+  cycles_per_us = 2000;
+  init_key_value();
+  rocksdb_init();
+  PutInit();
+
+  printf("PutInit\n");
+
+  unsigned int i = 0;
+
+  uint64_t durations[1000];
+  unsigned long long total = 0;
+  for (i = 0; i < 1000; i++) {
+    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+    uint64_t start = rdtscp(NULL);
+    DoScan(readoptions);
+    uint64_t end = rdtscp(NULL);
+    rocksdb_readoptions_destroy(readoptions);
+    durations[i] = end - start;
+    total += end - start;
+  }
+  std::sort(std::begin(durations), std::end(durations));
+  fprintf(stderr, "stats for %u Scan iterations: \n", i);
+  fprintf(stderr, "avg: %0.3f\n",
+          (double)total / i / (double)cycles_per_us);
+  fprintf(stderr, "median: %0.3f\n",
+          (double)durations[i / 2] / (double)cycles_per_us);
+  fprintf(stderr, "p99.9: %0.3f\n",
+          (double)durations[i * 999 / 1000] / (double)cycles_per_us);
+
+  uint64_t durations2[5000];  
+  total = 0;
+  for (i = 0; i < 5000; i++) {
+    int j = rand() % 5000;
+    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+    uint64_t start = rdtscp(NULL);
+    barrier();
+    DoGet(readoptions, j);
+    barrier();
+    uint64_t end = rdtscp(NULL);
+    rocksdb_readoptions_destroy(readoptions);
+    durations2[i] = end - start;
+    total += end - start;
+  }
+ 
+  std::sort(std::begin(durations2), std::end(durations2));
+  fprintf(stderr, "stats for %u Get iterations: \n", i);
+  fprintf(stderr, "avg: %0.3f\n",
+          (double)total / i / (double)cycles_per_us);
+  fprintf(stderr, "median: %0.3f\n",
+          (double)durations2[i / 2] / (double)cycles_per_us);
+  fprintf(stderr, "p99.9: %0.3f\n",
+          (double)durations2[i * 999 / 1000] / (double)cycles_per_us);
+
+  rt::WaitGroup wg(1);
+  rt::UintrTimerStart();
+  _stui();
+  
+  // udpconn_t *c;
+	// ssize_t ret;
+	// ret = udp_listen(listen_addr, &c);
+	// if (ret) {
+	// 	log_err("stat: udp_listen failed, ret = %ld", ret);
+	// 	return;
+	// }
+
+  for (int port = 0; port < 4; ++port) {
+    udpconn_t *c;
+    ssize_t ret;
+    listen_addr.port = 5000 + port;
+    ret = udp_listen(listen_addr, &c);
+    if (ret) {
+      log_err("stat: udp_listen failed, ret = %ld", ret);
+      return;
+    }
+    
+    for (int i = 0; i < 32; ++i) {
+      rt::Spawn([&, c]() {
+        HandleLoop(c);
+      });
+    }
+  }
+
+  wg.Wait();
+}
+
 void rocksdb_init() {
   rocksdb_options_t *options = rocksdb_options_create();
 
@@ -573,6 +703,7 @@ void rocksdb_init() {
   char *err = NULL;
   char DBPath[] = "/tmp/my_db";
   db = rocksdb_open(options, DBPath, &err);
+  // printf("rocksdb_open ends\n");
   if (err) {
     log_err("Could not open RocksDB database: %s\n", err);
     exit(1);
@@ -596,7 +727,9 @@ int main(int argc, char *argv[]) {
 	rt::SignalBlock();
 #endif
 
-  ret = runtime_init(argv[1], MainHandler, NULL);
+  // bool flag = 1;
+  // ret = runtime_init(argv[1], MainHandler_scan, (void*) &flag);
+  ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;

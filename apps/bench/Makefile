@@ -8,6 +8,9 @@ fake_worker_obj = $(fake_worker_src:.cc=.o)
 tbench_src = tbench.cc
 tbench_obj = $(tbench_src:.cc=.o)
 
+nre_bench_src = nre_bench.cc 
+nre_bench_obj = $(nre_bench_src:.cc=.o)
+
 callibrate_src = callibrate.cc
 callibrate_obj = $(callibrate_src:.cc=.o)
 
@@ -56,13 +59,25 @@ linux_mech_bench_obj = $(linux_mech_bench_src:.cc=.o)
 librt_libs = $(ROOT_PATH)/bindings/cc/librt++.a
 INC += -I$(ROOT_PATH)/bindings/cc
 
+lib_shim = $(ROOT_PATH)/shim/libshim.a
+WRAP_FLAGS = -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc -Wl,-wrap=aligned_alloc -Wl,-wrap=posix_memalign
+ifeq ($(CONFIG_UNSAFE_PREEMPT),flag)
+WRAP_FLAGS += -Wl,-wrap=memcpy -Wl,-wrap=memcmp -Wl,-wrap=memmove -Wl,-wrap=memset -Wl,-wrap=strcmp -Wl,-wrap=strncmp   
+endif 
+ifeq ($(CONFIG_UNSAFE_PREEMPT),clui)
+WRAP_FLAGS += -Wl,-wrap=memcpy -Wl,-wrap=memcmp -Wl,-wrap=memmove -Wl,-wrap=memset -Wl,-wrap=strcmp -Wl,-wrap=strncmp   
+endif 
+
 # must be first
-all: tbench callibrate stress efficiency efficiency_linux \
+all: tbench nre_bench callibrate stress efficiency efficiency_linux \
      netbench netbench2 netbench_udp netbench_linux netperf linux_mech_bench \
-     stress_linux memcached_router flash_client storage_bench
+     stress_linux memcached_router flash_client storage_bench 
 
 tbench: $(tbench_obj) $(librt_libs) $(RUNTIME_DEPS)
 	$(LDXX) -o $@ $(LDFLAGS) $(tbench_obj) $(librt_libs) $(RUNTIME_LIBS)
+
+nre_bench: $(nre_bench_obj) $(lib_shim) $(librt_libs) $(RUNTIME_DEPS)
+	$(LDXX) -o $@ $(LDFLAGS) $(WRAP_FLAGS) $(nre_bench_obj) $(lib_shim) $(librt_libs) $(RUNTIME_LIBS)
 
 callibrate: $(fake_worker_obj) $(callibrate_obj)
 	$(LDXX) -o $@ $(LDFLAGS) $(fake_worker_obj) $(callibrate_obj) -lpthread

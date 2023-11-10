@@ -10,22 +10,22 @@
 int mod = 1023;
 
 int **mm_init_int(int n) {
-  _clui();
+  // _clui();
   int **m = (int **)malloc(n * sizeof(void *));
   for (int i = 0; i < n; ++i) {
     m[i] = calloc(n, sizeof(int));
   }
-  _stui();
+  // _stui();
   return m;
 }
 
 void mm_destroy_int(int n, int **m) {
-  _clui();
+  // _clui();
   for (int i = 0; i < n; ++i) {
     free(m[i]);
   }
   free(m);
-  _stui();
+  // _stui();
 }
 
 int **mm_gen_int(int n, int seed) {

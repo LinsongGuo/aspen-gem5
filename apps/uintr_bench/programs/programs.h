@@ -15,4 +15,8 @@ long long matmul_int();
 long long mcf();
 void mcf_init();
 
+long long array();
+
+long long cmp();
+void cmp_init();
 #endif // PROGRAMS_H

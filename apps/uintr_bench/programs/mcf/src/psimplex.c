@@ -54,7 +54,7 @@ long primal_net_simplex(  net )
     long          *bound_exchanges = &(net->bound_exchanges);
     long          *checksum = &(net->checksum);
 
-    _clui();
+    // _clui();
     long nr_group;
     long group_pos;
     long initialize = 1;
@@ -65,7 +65,7 @@ long primal_net_simplex(  net )
     // printf("basket: %ld, %d\n", sizeof(BASKET), (B+K+1));
     BASKET **perm = (BASKET**) malloc(sizeof(BASKET*) * (B+K+1));
     // printf("basket: %ld, %d\n", sizeof(BASKET*), (B+K+1));
-    _stui();
+    // _stui();
 
     while( !opt )
     {       

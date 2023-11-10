@@ -1,13 +1,14 @@
 SRCS = $(wildcard *.c)
 OBJS = $(patsubst %.c,%.o,$(SRCS))
 
-all: $(OBJS)
+all: $(OBJS) array.o
 
 %.o: %.c
-	$(CC) -g -O2 -muintr -c $< -o $@
+	$(CC) -g -O3 -muintr -mavx2 -c $< -o $@
 	
-# gcc -std=gnu11 -g -Wall -D_GNU_SOURCE -I../../../inc -I../../../bindings/cc -DNDEBUG -O2 -muintr -c $< -o $@
+%.o: %.cc
+	$(CXX) -g -O3 -muintr -c $< -o $@
 
 clean:
-	rm $(OBJS)
+	rm $(OBJS) array.o
 

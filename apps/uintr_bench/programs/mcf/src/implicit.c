@@ -51,16 +51,17 @@ long resize_prob( net )
     fflush( stdout );
 #endif
 
-    _clui();
+    // _clui();
     arc = (arc_t *) realloc( net->arcs, net->max_m * sizeof(arc_t) );
     if( !arc )
     {
+        _clui();
         printf( "network %s: not enough memory\n", net->inputfile );
         fflush( stdout );
         _stui();
         return -1;
     }
-    _stui();
+    // _stui();
     
     off = (size_t)arc - (size_t)net->arcs;
         

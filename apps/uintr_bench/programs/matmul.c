@@ -9,23 +9,23 @@
 //#include <runtime/smalloc.h>
 
 double **mm_init(int n) {
-  _clui();
+  // _clui();
   double **m = (double **)malloc(n * sizeof(void *));
   for (int i = 0; i < n; ++i) {
     m[i] = calloc(n, sizeof(double));
     // m[i] = smalloc(n * sizeof(double));
   }
-  _stui();
+  // _stui();
   return m;
 }
 
 void mm_destroy(int n, double **m) {
-  _clui();
+  // _clui();
   for (int i = 0; i < n; ++i) {
     free(m[i]);
   }
   free(m);
-  _stui();
+  // _stui();
 }
 
 double **mm_gen(int n, double seed) {
@@ -79,7 +79,7 @@ double calc(int n) {
 }
 
 long long matmul() {
-  int n = 1000;
+  int n = 1100;
 /*
   _clui();
   // printf("p1\n");

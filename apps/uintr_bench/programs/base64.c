@@ -42,9 +42,9 @@ void init_decode_table() {
 #define next_char(x) char x = decode_table[(unsigned char)*str++]; if (x < 0) return 1;
 
 int decode(int size, const char* str, int* out_size, char** output) {
-  _clui();
+  // _clui();
   *output = (char*) malloc( decode_size(size) );
-  _stui();
+  // _stui();
 
   char *out = *output;
   while (size > 0 && (str[size - 1] == '\n' || str[size - 1] == '\r' || str[size - 1] == '=')) size--;
@@ -77,9 +77,9 @@ int decode(int size, const char* str, int* out_size, char** output) {
 }
 
 void encode(int size, const char* str, int* out_size, char** output) {
-  _clui();
+  // _clui();
   *output = (char*) malloc( encode_size(size) );
-  _stui();
+  // _stui();
 
   char *out = *output;
   const char* ends = str + (size - size % 3);
@@ -146,9 +146,9 @@ long long base64() {
 
   const int STR_SIZE = 10000000;
   
-  _clui();
+  // _clui();
   char *str = (char*) malloc(STR_SIZE + 1);
-  _stui();
+  // _stui();
 
   for (int i = 0; i < STR_SIZE; i++) { str[i] = 'a'; }
   str[STR_SIZE] = '\0';
@@ -162,9 +162,9 @@ long long base64() {
     int str2_size;
     encode(STR_SIZE, str, &str2_size, &str2); 
     s += str2_size;
-    _clui();
-	free(str2);
-	_stui(); 
+    // _clui();
+	  free(str2);
+	  // _stui(); 
   }
   // printf("encode: %d, %.2f\n", s, (float)(clock() - t)/CLOCKS_PER_SEC);
   res += s;
@@ -179,12 +179,14 @@ long long base64() {
     char *str3;
     int str3_size;
     if (decode(str2_size, str2, &str3_size, &str3) != 0) {
+      _clui();
       printf("error when decoding");
+      _stui();
     }
     s += str3_size;
-	_clui();
+	  // _clui();
     free(str3);
-	_stui();
+	  // _stui();
   }
   res += s;
   // printf("decode: %d, %.2f\n", s, (float)(clock() - t)/CLOCKS_PER_SEC);

@@ -109,7 +109,6 @@ bool pending_cqe(int kidx) {
 long long last[MAX_KTHREADS];
 void uintr_timer_upd(int kidx) {
     ACCESS_ONCE(last[kidx]) = now();
-    // last[kidx] = now();
 }
 
 void* uintr_timer(void*) {
@@ -162,13 +161,13 @@ void* uintr_timer(void*) {
                 continue;
             }   
             if (current - ACCESS_ONCE(last[i]) >= UINTR_TIMESLICE) {
-                // if (pending_uthreads(i) || pending_cqe(i)) {
-                    printf("uipi %d\n", i);
+                if (pending_uthreads(i) || pending_cqe(i)) {
+                    // printf("uipi %d: %lld\n", i, current - ACCESS_ONCE(last[i]));
                     _senduipi(uipi_index[i]);
                     ++uintr_sent[i];
                     // printf("%d: %lld - %lld (%d) = %lld\n", i, current, last_sent[i], last_sent[i] == last[i], current - last_sent[i]);
                     ACCESS_ONCE(last[i]) = current;
-                // }
+                }
             }   
         }
     } 

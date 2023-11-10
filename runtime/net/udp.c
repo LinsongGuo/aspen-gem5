@@ -601,8 +601,8 @@ static void udp_par_recv(struct trans_entry *e, struct mbuf *m)
 	d->raddr.ip = ntoh32(iphdr->saddr);
 	d->raddr.port = ntoh16(udphdr->src_port);
 	d->release_data = m;
-	thread_ready(th);
-	// thread_ready_head(th);
+	// thread_ready(th);
+	thread_ready_head(th);
 }
 
 /* operations for UDP spawners */
