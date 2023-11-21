@@ -1,10 +1,10 @@
 #include <stdint.h>
 #include <stdio.h>
-// #include <stdlib.h>
 #include <unistd.h>
 #include <x86intrin.h>
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include <base/log.h>
 #include <base/assert.h>
@@ -47,10 +47,8 @@ volatile int uintr_timer_flag = 0;
 volatile int *cpu_preempt_points[MAX_KTHREADS];
 __thread int concord_preempt_now;
 
-#if defined(UINTR_PREEMPT) || defined(CONCORD_PREEMPT)
 long long TIMESLICE = 1000000;
 long long start, end;
-#endif
 
 void concord_func() {
     // if(concord_lock_counter)
@@ -82,7 +80,20 @@ void concord_set_preempt_flag(int flag) {
     concord_preempt_now = flag;
 }
 
-#if defined(UINTR_PREEMPT) || defined(CONCORD_PREEMPT)
+void signal_block() {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGUSR1);
+    pthread_sigmask(SIG_BLOCK, &mask, NULL);
+}
+
+void signal_unblock(void) {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGUSR1);
+    pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+}
+
 void set_thread_affinity(int core) {
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
@@ -116,6 +127,20 @@ void __attribute__ ((interrupt))
 #endif
 }
 
+void signal_handler(int signum) {
+    ++uintr_recv[0];
+
+#if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (!preempt_enabled()) {
+		set_upreempt_needed();
+		return;
+	}
+    thread_yield();
+#else
+    thread_yield();
+#endif
+}
+
 bool pending_uthreads(int kidx) {
 #ifdef DIRECTPATH
     return ACCESS_ONCE(ks[kidx]->rq_tail) != ACCESS_ONCE(ks[kidx]->rq_head);
@@ -142,7 +167,12 @@ void* uintr_timer(void*) {
 
     set_thread_affinity(55);
     
+#ifdef SIGNAL_PREEMPT
+    signal_block();
+#endif 
+
     int i;
+
 #ifdef UINTR_PREEMPT
     for (i = 0; i < maxks; ++i) {
         uipi_index[i] = uintr_register_sender(uintr_fd[i], 0);
@@ -152,34 +182,22 @@ void* uintr_timer(void*) {
         }
     }	    
 #endif
-    // long long last = now(), current;
-	// while (uintr_timer_flag != -1) {
-    //     current = now();
-		
-	// 	if (!uintr_timer_flag) {
-	// 		last = current;
-	// 		continue;
-	// 	}
-
-    //     if (current - last >= TIMESLICE) {
-	// 		last = current;
-    //         for (i = 0; i < maxks; ++i) {
-    //             // if (ACCESS_ONCE(ks[i]->rq_tail) != ACCESS_ONCE(ks[i]->rq_head)) {
-    //             // if (pending_uthreads(i) || pending_cqe(i)) {
-    //                 // log_info("uipi %d", i);
-    //                 _senduipi(uipi_index[i]);
-    //                 ++uintr_sent[i];
-    //             // }
-    //         }
-    //     }
-    // } 
 
     long long current;
+#ifdef SIGNAL_PREEMPT
+    for (i = 0; i < (maxks >> 1); ++i) {
+#else 
     for (i = 0; i < maxks; ++i) {
+#endif 
         ACCESS_ONCE(last[i]) = now();
     }
-    while (uintr_timer_flag != -1) {
-        for (i = 0; i < maxks; ++i) {
+
+    while (uintr_timer_flag != -1) { 
+#ifdef SIGNAL_PREEMPT
+    for (i = 0; i < (maxks >> 1); ++i) {
+#else 
+    for (i = 0; i < maxks; ++i) {
+#endif
             current = now();
 		
             if (!uintr_timer_flag) {
@@ -193,7 +211,40 @@ void* uintr_timer(void*) {
                     _senduipi(uipi_index[i]);
 #elif defined(CONCORD_PREEMPT)
                     *(cpu_preempt_points[i]) = 1;
+#elif defined(SIGNAL_PREEMPT)
+                    pthread_kill(kth_tid[i], SIGUSR1);
 #endif
+                    ++uintr_sent[i];
+                    ACCESS_ONCE(last[i]) = current;
+                }
+            }   
+        }
+    } 
+
+    return NULL;
+}
+
+void* signal_timer2(void*) {
+    signal_block();
+
+    set_thread_affinity(53);
+    
+    int i;
+    long long current;
+    for (i = (maxks>>1); i < maxks; ++i) {
+        ACCESS_ONCE(last[i]) = now();
+    }
+    while (uintr_timer_flag != -1) {
+        for (i = (maxks>>1); i < maxks; ++i) {
+            current = now();
+		
+            if (!uintr_timer_flag) {
+                ACCESS_ONCE(last[i]) = current;
+                continue;
+            }   
+            if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
+                if (pending_uthreads(i) || pending_cqe(i)) {
+                    pthread_kill(kth_tid[i], SIGUSR1);
                     ++uintr_sent[i];
                     ACCESS_ONCE(last[i]) = current;
                 }
@@ -221,7 +272,7 @@ int uintr_init(void) {
     memset(uintr_recv, 0, sizeof(uintr_recv));
 
     // TIMESLICE = atoi(getenv("TIMESLICE")) * 1000L;
-    TIMESLICE = 10 * 1000L;
+    TIMESLICE = 5 * 1000L;
 	log_info("TIMESLICE: %lld us", TIMESLICE / 1000);
     return 0;
 }
@@ -249,10 +300,27 @@ int uintr_init_thread(void) {
 }
 
 int uintr_init_late(void) {
+#ifdef SIGNAL_PREEMPT
+    struct sigaction action;
+    action.sa_handler = signal_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    if (sigaction(SIGUSR1, &action, NULL) != 0) {
+        log_err("signal handler registeration failed");
+    }
+#endif
+
     pthread_t timer_thread;
     int ret = pthread_create(&timer_thread, NULL, uintr_timer, NULL);
 	BUG_ON(ret);
     log_info("UINTR timer pthread creates");
+
+#ifdef SIGNAL_PREEMPT
+    pthread_t timer_thread2;
+    int ret2 = pthread_create(&timer_thread2, NULL, signal_timer2, NULL);
+	BUG_ON(ret2);
+    log_info("Signal timer pthread2 creates");
+#endif
 
     return 0;
 }
@@ -269,4 +337,3 @@ void uintr_timer_summary(void) {
     printf("Preemption_sent: %lld\n", uintr_sent_total);
     printf("Preemption_received: %lld\n", uintr_recv_total);	
 }
-#endif // UINTR or CONCORD

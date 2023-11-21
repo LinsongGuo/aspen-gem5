@@ -33,13 +33,13 @@ BENCH=rocksdb
 # ROCKSDB_LIB=rocksdb_avx_pic/librocksdb.a
 # ROCKSDB_LIB_CONCORD=rocksdb_avx_pic/librocksdb_concord.a
 
-ROCKSDB_INC=-Irocksdb_pic/include/rocksdb/
-ROCKSDB_LIB=rocksdb_pic/librocksdb.a
-ROCKSDB_LIB_CONCORD=rocksdb_pic/librocksdb_concord.a
+# ROCKSDB_INC=-Irocksdb_pic/include/rocksdb/
+# ROCKSDB_LIB=rocksdb_pic/librocksdb.a
+# ROCKSDB_LIB_CONCORD=rocksdb_pic/librocksdb_concord.a
 
-# ROCKSDB_INC=-Irocksdb/include/rocksdb/
-# ROCKSDB_LIB=rocksdb/librocksdb.a
-# ROCKSDB_LIB_CONCORD=rocksdb/librocksdb_concord.a
+ROCKSDB_INC=-Irocksdb/include/rocksdb/
+ROCKSDB_LIB=rocksdb/librocksdb.a
+ROCKSDB_LIB_CONCORD=rocksdb/librocksdb_concord.a
 
 # ROCKSDB_INC=-Irocksdb_nopt/include/rocksdb/
 # ROCKSDB_LIB=rocksdb_nopt/librocksdb.a
@@ -59,17 +59,17 @@ concord-rocksdb:
 	$(CC) $(BENCH).bc $(CFLAGS) -c -o concord_apirocksdb.a
 	$(CC) $(BENCH).pass.opt.bc $(CFLAGS) -c -o concord_apirocksdb_concord.a
 	
-rocksdb_server:
-	$(CXX) $(CFLAGS) -fPIC $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
-
-rocksdb_server_concord:
-	$(CXX) $(CFLAGS) -fPIC $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server_concord -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB_CONCORD) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
-
 # rocksdb_server:
-# 	$(CXX) $(CFLAGS) $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
+# 	$(CXX) $(CFLAGS) -fPIC $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
 
 # rocksdb_server_concord:
-# 	$(CXX) $(CFLAGS) $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server_concord -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB_CONCORD) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
+# 	$(CXX) $(CFLAGS) -fPIC $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server_concord -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB_CONCORD) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
+
+rocksdb_server:
+	$(CXX) $(CFLAGS) $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
+
+rocksdb_server_concord:
+	$(CXX) $(CFLAGS) $(LDFLAGS) $(WRAP_FLAGS) $(ROCKSDB_INC) $(CALADAN_INC) -o rocksdb_server_concord -ldl rocksdb_server.cc concord_apirocksdb.a $(ROCKSDB_LIB_CONCORD) $(CALADAN_LIBS) -lgflags -lsnappy -lz -llz4 -lpthread -ljemalloc
 
 clean:
 	rm -f rocksdb_server rocksdb_server_concord
