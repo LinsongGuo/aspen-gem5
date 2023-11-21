@@ -110,8 +110,78 @@ struct thread_tf {
 	// uint64_t ymm8[4] __attribute__((aligned(32)));
 	// uint64_t ymm9[4] __attribute__((aligned(32)));
 	// uint64_t ymm10[4] __attribute__((aligned(32)));
+
+#elif defined(UNSAFE_PREEMPT_SIMDREG_SSE)
+	uint64_t k1;
+	uint64_t k2;
+	uint64_t k3;
+	uint64_t k4;
+	uint64_t k5;
+	uint64_t k6;
+	uint64_t k7;
+
+	uint64_t xmm0[2] __attribute__((aligned(16))); 
+	uint64_t xmm1[2] __attribute__((aligned(16)));
+	uint64_t xmm2[2] __attribute__((aligned(16))); 
+	uint64_t xmm3[2] __attribute__((aligned(16)));
+	uint64_t xmm4[2] __attribute__((aligned(16))); 
+	uint64_t xmm5[2] __attribute__((aligned(16)));
+	uint64_t xmm6[2] __attribute__((aligned(16))); 
+	uint64_t xmm7[2] __attribute__((aligned(16)));
+	uint64_t xmm8[2] __attribute__((aligned(16))); 
+	uint64_t xmm9[2] __attribute__((aligned(16)));
+	uint64_t xmm10[2] __attribute__((aligned(16))); 
+	uint64_t xmm11[2] __attribute__((aligned(16)));
+	uint64_t xmm12[2] __attribute__((aligned(16)));
+	uint64_t xmm13[2] __attribute__((aligned(16)));
+	uint64_t xmm14[2] __attribute__((aligned(16)));
+	uint64_t xmm15[2] __attribute__((aligned(16)));
+
+#elif defined(UNSAFE_PREEMPT_SIMDREG_512)
+	uint64_t k1;
+	uint64_t k2;
+	uint64_t k3;
+	uint64_t k4;
+	uint64_t k5;
+	uint64_t k6;
+	uint64_t k7;
+
+	uint64_t zmm0[4] __attribute__((aligned(64))); 
+	uint64_t zmm1[4] __attribute__((aligned(64)));
+	uint64_t zmm2[4] __attribute__((aligned(64)));
+	uint64_t zmm3[4] __attribute__((aligned(64)));
+	uint64_t zmm4[4] __attribute__((aligned(64)));
+	uint64_t zmm5[4] __attribute__((aligned(64)));
+	uint64_t zmm6[4] __attribute__((aligned(64)));
+	uint64_t zmm7[4] __attribute__((aligned(64)));
+	uint64_t zmm8[4] __attribute__((aligned(64)));
+	uint64_t zmm9[4] __attribute__((aligned(64)));
+	uint64_t zmm10[4] __attribute__((aligned(64)));
+	uint64_t zmm11[4] __attribute__((aligned(64)));
+	uint64_t zmm12[4] __attribute__((aligned(64)));
+	uint64_t zmm13[4] __attribute__((aligned(64)));
+	uint64_t zmm14[4] __attribute__((aligned(64)));
+	uint64_t zmm15[4] __attribute__((aligned(64)));
+	
+	uint64_t zmm16[4] __attribute__((aligned(64))); 
+	uint64_t zmm17[4] __attribute__((aligned(64))); 
+	uint64_t zmm18[4] __attribute__((aligned(64))); 
+	uint64_t zmm19[4] __attribute__((aligned(64)));
+	uint64_t zmm20[4] __attribute__((aligned(64)));
+	uint64_t zmm21[4] __attribute__((aligned(64))); 
+	uint64_t zmm22[4] __attribute__((aligned(64))); 
+	uint64_t zmm23[4] __attribute__((aligned(64))); 
+	uint64_t zmm24[4] __attribute__((aligned(64)));
+	uint64_t zmm25[4] __attribute__((aligned(64)));
+	uint64_t zmm26[4] __attribute__((aligned(64))); 
+	uint64_t zmm27[4] __attribute__((aligned(64))); 
+	uint64_t zmm28[4] __attribute__((aligned(64))); 
+	uint64_t zmm29[4] __attribute__((aligned(64)));
+	uint64_t zmm30[4] __attribute__((aligned(64)));
+	uint64_t zmm31[4] __attribute__((aligned(64)));
 	
 #elif defined(UNSAFE_PREEMPT_SIMDREG)
+	#ifndef CONCORD_PREEMPT
 	/* Mask registers */
 	// uint64_t k0; ko is a hardcoded constant 
 	uint64_t k1;
@@ -156,6 +226,7 @@ struct thread_tf {
 	uint64_t ymm29[4] __attribute__((aligned(32)));
 	uint64_t ymm30[4] __attribute__((aligned(32)));
 	uint64_t ymm31[4] __attribute__((aligned(32)));
+	#endif
 #endif 
 };
 

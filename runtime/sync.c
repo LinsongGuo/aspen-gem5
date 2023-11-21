@@ -20,7 +20,7 @@
 void __mutex_lock(mutex_t *m)
 {
 	thread_t *myth;
-
+	// log_info("__mutex_lock");
 	bool enabled = preempt_enabled();
 	if (likely(enabled)) {
 		spin_lock_np(&m->waiter_lock);

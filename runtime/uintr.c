@@ -38,13 +38,51 @@
 #define TOKEN 0
 #define MAX_KTHREADS 32
 
-long long UINTR_TIMESLICE = 1000000;
-int uintr_fd[MAX_KTHREADS], kthread_num = 0;
+
+int uintr_fd[MAX_KTHREADS];
 int uipi_index[MAX_KTHREADS];
-long long start, end;
 long long uintr_sent[MAX_KTHREADS], uintr_recv[MAX_KTHREADS];
 volatile int uintr_timer_flag = 0;
 
+volatile int *cpu_preempt_points[MAX_KTHREADS];
+__thread int concord_preempt_now;
+
+#if defined(UINTR_PREEMPT) || defined(CONCORD_PREEMPT)
+long long TIMESLICE = 1000000;
+long long start, end;
+#endif
+
+void concord_func() {
+    // if(concord_lock_counter)
+    //     return;
+    concord_preempt_now = 0;
+    uintr_recv[myk()->kthread_idx]++;
+    
+#if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
+    if (likely(preempt_enabled())) {
+     	thread_yield();
+	}
+    else {
+        set_upreempt_needed();
+    }
+#else
+    thread_yield();
+#endif
+}
+
+void concord_disable() {
+    preempt_disable();
+}
+
+void concord_enable() {
+    preempt_enable();
+}
+
+void concord_set_preempt_flag(int flag) {
+    concord_preempt_now = flag;
+}
+
+#if defined(UINTR_PREEMPT) || defined(CONCORD_PREEMPT)
 void set_thread_affinity(int core) {
 	cpu_set_t mask;
 	CPU_ZERO(&mask);
@@ -58,33 +96,21 @@ long long now() {
 	return ts.tv_sec * 1e9 + ts.tv_nsec;
 }
 
-#ifdef UINTR_PREEMPT
-// DEFINE_PERTHREAD(unsigned int, non_reentrance);
-// DEFINE_PERTHREAD(unsigned int, uintr_pending);
-
 void __attribute__ ((interrupt))
     __attribute__((target("general-regs-only" /*, "inline-all-stringops"*/)))
      ui_handler(struct __uintr_frame *ui_frame,
 		unsigned long long vector) {
-	
-	// print_entry();
-	
+		
 	++uintr_recv[vector];
 
 #if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
-    if (!preempt_enabled()) {
-     	set_upreempt_needed();
-		return;
+    if (likely(preempt_enabled())) {
+     	thread_yield();
 	}
-    thread_yield();
-    // if (perthread_read(non_reentrance)) {
-    //     perthread_store(uintr_pending, 1);
-    // }
-    // else {
-    //     perthread_store(uintr_pending, 0);
-    //     thread_yield();
-	//     _stui();	
-    // }
+    else {
+        set_upreempt_needed();
+    }
+ 
 #else
     thread_yield();
 #endif
@@ -106,7 +132,7 @@ bool pending_cqe(int kidx) {
 #endif
 }
 
-long long last[MAX_KTHREADS];
+volatile long long last[MAX_KTHREADS];
 void uintr_timer_upd(int kidx) {
     ACCESS_ONCE(last[kidx]) = now();
 }
@@ -116,16 +142,16 @@ void* uintr_timer(void*) {
 
     set_thread_affinity(55);
     
-    log_info("kthread_num: %d, maxks: %d", kthread_num, maxks);
     int i;
+#ifdef UINTR_PREEMPT
     for (i = 0; i < maxks; ++i) {
         uipi_index[i] = uintr_register_sender(uintr_fd[i], 0);
-        log_info("uipi_index %d %d", i, uipi_index[i]);
+        // log_info("uipi_index %d %d", i, uipi_index[i]);
         if (uipi_index[i] < 0) {
             log_err("failure to register uintr sender");
         }
     }	    
-
+#endif
     // long long last = now(), current;
 	// while (uintr_timer_flag != -1) {
     //     current = now();
@@ -135,7 +161,7 @@ void* uintr_timer(void*) {
 	// 		continue;
 	// 	}
 
-    //     if (current - last >= UINTR_TIMESLICE) {
+    //     if (current - last >= TIMESLICE) {
 	// 		last = current;
     //         for (i = 0; i < maxks; ++i) {
     //             // if (ACCESS_ONCE(ks[i]->rq_tail) != ACCESS_ONCE(ks[i]->rq_head)) {
@@ -160,12 +186,15 @@ void* uintr_timer(void*) {
                 ACCESS_ONCE(last[i]) = current;
                 continue;
             }   
-            if (current - ACCESS_ONCE(last[i]) >= UINTR_TIMESLICE) {
+            if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
                 if (pending_uthreads(i) || pending_cqe(i)) {
-                    // printf("uipi %d: %lld\n", i, current - ACCESS_ONCE(last[i]));
+                    // printf("uipi %d: %lld %lld\n", i, uintr_sent[i], current - ACCESS_ONCE(last[i]));
+#ifdef UINTR_PREEMPT
                     _senduipi(uipi_index[i]);
+#elif defined(CONCORD_PREEMPT)
+                    *(cpu_preempt_points[i]) = 1;
+#endif
                     ++uintr_sent[i];
-                    // printf("%d: %lld - %lld (%d) = %lld\n", i, current, last_sent[i], last_sent[i] == last[i], current - last_sent[i]);
                     ACCESS_ONCE(last[i]) = current;
                 }
             }   
@@ -177,7 +206,8 @@ void* uintr_timer(void*) {
 
 void uintr_timer_start() {
 	uintr_timer_flag = 1;
-	start = now();
+    start = now();
+    _stui();
 }
 
 void uintr_timer_end() {
@@ -190,11 +220,9 @@ int uintr_init(void) {
     memset(uintr_sent, 0, sizeof(uintr_sent));
     memset(uintr_recv, 0, sizeof(uintr_recv));
 
-    // UINTR_TIMESLICE = atoi(getenv("UINTR_TIMESLICE")) * 1000L;
-	UINTR_TIMESLICE = 10 * 1000L;
-    // UINTR_TIMESLICE = 5 * 1000L;
-    // UINTR_TIMESLICE = 1000000000L * 1000L;
-	log_info("UINTR_TIMESLICE: %lld us", UINTR_TIMESLICE / 1000);
+    // TIMESLICE = atoi(getenv("TIMESLICE")) * 1000L;
+    TIMESLICE = 10 * 1000L;
+	log_info("TIMESLICE: %lld us", TIMESLICE / 1000);
     return 0;
 }
 
@@ -202,6 +230,11 @@ int uintr_init_thread(void) {
     int kth_id = myk()->kthread_idx;
     assert(kth_id >= 0 && kth_id < MAX_KTHREADS);
 
+    // For concord:
+    concord_preempt_now = 0;
+    cpu_preempt_points[kth_id] = &concord_preempt_now;
+
+    // For uintr:
 	if (uintr_register_handler(ui_handler, 0)) {
 		log_err("failure to register uintr handler");
     }
@@ -211,48 +244,29 @@ int uintr_init_thread(void) {
 		log_err("failure to create uintr fd");
     }
     uintr_fd[kth_id] = uintr_fd_; 
-    log_info("uintr_create_fd %d %d", kth_id, uintr_fd[kth_id]);
-    // perthread_store(non_reentrance, 0);
-    // perthread_store(uintr_pending, 0);
 
     return 0;
 }
 
 int uintr_init_late(void) {
-    int i, flag = 0;
-    for (i = 0; i < MAX_KTHREADS; ++i) {
-        if (uintr_fd[i] > 0) {
-            if (flag) {
-                log_err("wrong uintr_fd");
-                break;
-            }
-            kthread_num++;
-        }
-        else {
-            flag = 1;
-        }
-    }
-    log_info("kthread_num = %d", kthread_num);
-
     pthread_t timer_thread;
     int ret = pthread_create(&timer_thread, NULL, uintr_timer, NULL);
 	BUG_ON(ret);
-    log_info("timer pthread creates");
+    log_info("UINTR timer pthread creates");
 
     return 0;
 }
 
 void uintr_timer_summary(void) {
-	// printf("start = %lld, end = %lld, time = %lld\n", start, end, end - start);
-    printf("Execution: %.9f\n", 1.*(end - start) / 1e9);
-    
+	printf("Execution: %.9f\n", 1.*(end - start) / 1e9);
+
     long long uintr_sent_total = 0, uintr_recv_total = 0;
     int i;
-    for (i = 0; i < kthread_num; ++i) {
+    for (i = 0; i < maxks; ++i) {
         uintr_sent_total += uintr_sent[i];
         uintr_recv_total += uintr_recv[i];
     }
-    printf("Uintrs_sent: %lld\n", uintr_sent_total);
-    printf("Uintrs_received: %lld\n", uintr_recv_total);	
+    printf("Preemption_sent: %lld\n", uintr_sent_total);
+    printf("Preemption_received: %lld\n", uintr_recv_total);	
 }
-#endif
+#endif // UINTR or CONCORD

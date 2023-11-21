@@ -29,9 +29,9 @@ void *__wrap_malloc(size_t size) {
         return __real_malloc(size);
 
 // #if defined(UNSAFE_PREEMPT_CLUI)
-//     unsigned char uif = _testui();
-//     if (likely(uif))
-//         _clui();
+//  unsigned char uif = _testui();
+//  if (likely(uif))
+//      _stui();
 // #elif defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
 //     preempt_disable();
 // #endif

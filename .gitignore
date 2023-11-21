@@ -1,6 +1,8 @@
 *.d
 *.o
 *.a
+*.bc
+*.ll
 [._]*.sw[a-p]
 iokerneld
 *~

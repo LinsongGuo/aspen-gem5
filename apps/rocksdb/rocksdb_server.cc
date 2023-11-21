@@ -124,6 +124,25 @@ static inline void DoGet(rocksdb_readoptions_t *readoptions, int i) {
   free(returned_value);
 }
 
+void get_test() {
+  char *err = NULL;
+  rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+  for (int i = 0; i < N * 300; i++) {
+    int k = 1LL * i * i * i % N;
+    DoGet(readoptions, k);
+  }
+  rocksdb_readoptions_destroy(readoptions);
+}
+
+void scan_test() {
+  char *err = NULL;
+  rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+  for (int i = 0; i < 3000; i++) {
+    DoScan(readoptions);
+  }
+  rocksdb_readoptions_destroy(readoptions);
+}
+
 uint64_t trace_start[2*1000*1000], trace_end[2*1000*1000], trace_time[2*1000*1000];
 unsigned cnt = 0;
 
@@ -384,6 +403,52 @@ void MainHandler_simple(void *arg) {
   _clui();
 }
 
+void MainHandler_simple2(void *arg) {
+  srand(123);
+
+  rt::WaitGroup wg(1);
+
+  cycles_per_us = 2000;
+  init_key_value();
+  rocksdb_init();
+  PutInit();
+
+  const int task_num = 24;
+
+  rt::UintrTimerStart();
+  _stui();
+
+  int started = 0, finished = 0;
+  for (int i = 0; i < task_num; ++i) {
+		rt::Spawn([&, i]() {
+			started += 1;
+
+     	// if (started < task_num) {
+      //   rt::Yield();
+			// }
+      // else {
+      //   rt::UintrTimerStart();
+			// }
+
+      // if (i & 1)
+      //   get_test();
+      // else 
+      scan_test();
+      
+      finished += 1;
+      if (finished == task_num) {
+				rt::UintrTimerEnd();
+				wg.Done();
+     	}
+		});
+	}
+
+  wg.Wait();
+  rt::UintrTimerSummary();
+  _clui();
+}
+
+
 void MainHandler3(void *arg) {
   rt::WaitGroup wg(1);
 
@@ -489,15 +554,13 @@ void MainHandler_scan(void *arg) {
 	}
 
   rt::WaitGroup wg(1);
-  int task_num = 32, cnt = 0;
+  int task_num = 1, cnt = 0;
 
   if (preempt_flag) {
     rt::UintrTimerStart();
     _stui();
   }
 
-  uint64_t start = rdtscp(NULL), end;
-  barrier();
   for (int i = 0; i < task_num; ++i) {
 		rt::Spawn([&, i]() {
       if (i + 1 < task_num) {
@@ -505,29 +568,24 @@ void MainHandler_scan(void *arg) {
       }
       
       rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+      for (int k = 0; k < 1000; ++k)
       DoScan(readoptions);
       rocksdb_readoptions_destroy(readoptions);
       
       cnt++;
       if (cnt == task_num) {
-        end = rdtscp(NULL);
-        barrier();
         wg.Done();
       }
 		});
 	}
           
   wg.Wait();
-  unsigned long long total = end - start;
 
   if (preempt_flag) {
     _clui();
     rt::UintrTimerEnd();
     rt::UintrTimerSummary();
   }
-  fprintf(stderr, "stats for %u iterations (Scan): \n", cnt);
-  fprintf(stderr, "avg: %0.3f\n",
-          (double)total / cnt / (double)cycles_per_us);
 }
 
 void MainHandler(void *arg) {
@@ -730,6 +788,8 @@ int main(int argc, char *argv[]) {
   // bool flag = 1;
   // ret = runtime_init(argv[1], MainHandler_scan, (void*) &flag);
   ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
+  // ret = runtime_init(argv[1], MainHandler, NULL);
+  // ret = runtime_init(argv[1], MainHandler_simple2, NULL);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;

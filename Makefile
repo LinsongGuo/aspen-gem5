@@ -30,16 +30,30 @@ runtime_src += $(wildcard runtime/rpc/*.c)
 ifeq ($(CONFIG_PREEMPT),signal)
 	runtime_asm = runtime/switch_signal.S
 else
-	ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg)
-	runtime_asm = runtime/switch_simdreg.S
-	else 
-		ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_custom)
-			runtime_asm = runtime/switch_simdreg_custom.S
-		else
-			ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_linpack)
-				runtime_asm = runtime/switch_simdreg_linpack.S
+	ifeq ($(CONFIG_PREEMPT),concord)
+		runtime_asm = runtime/switch.S
+#		runtime_asm = runtime/switch_simdreg.S
+	else
+		ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg)
+			runtime_asm = runtime/switch_simdreg.S
+#			runtime_asm = runtime/switch.S
+		else 
+			ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_custom)
+				runtime_asm = runtime/switch_simdreg_custom.S
 			else
-				runtime_asm = runtime/switch.S	
+				ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_linpack)
+					runtime_asm = runtime/switch_simdreg_linpack.S
+				else 
+					ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_sse)
+						runtime_asm = runtime/switch_simdreg_sse.S
+					else
+						ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_512)
+							runtime_asm = runtime/switch_simdreg_512.S
+						else
+							runtime_asm = runtime/switch.S
+						endif
+					endif
+				endif
 			endif
 		endif
 	endif

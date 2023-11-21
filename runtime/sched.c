@@ -478,7 +478,6 @@ done:
 static __always_inline void enter_schedule(thread_t *curth)
 {
 	struct kthread *k = myk();
-	// log_info("k %u", k->kthread_idx);
 	thread_t *th;
 	uint64_t now_tsc;
 
@@ -503,8 +502,8 @@ static __always_inline void enter_schedule(thread_t *curth)
 		return;
 	}
 
-	// if (unlikely(k->rq_head - k->rq_tail > 2)) {
-	// 	log_info("rq: %d", k->rq_head - k->rq_tail);
+	// if (unlikely(k->rq_head - k->rq_tail > 1)) {
+	// 	log_info("rq: %d on %d", k->rq_head - k->rq_tail, k->kthread_idx);
 	// }
 
 	/* fast path: switch directly to the next uthread */
@@ -944,7 +943,7 @@ void thread_exit(void)
  */
 static __noreturn void schedule_start(void)
 {
-	log_info("sizeof(thread_tf): %ld", sizeof(struct thread_tf));
+	// log_info("sizeof(thread_tf): %ld", sizeof(struct thread_tf));
 	struct kthread *k = myk();
 
 	/*

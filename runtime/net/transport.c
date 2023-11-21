@@ -4,6 +4,7 @@
 
 #include <base/stddef.h>
 #include <base/hash.h>
+#include <base/log.h>
 #include <runtime/rculist.h>
 #include <runtime/sync.h>
 #include <runtime/net.h>
@@ -187,6 +188,7 @@ static struct trans_entry *trans_lookup(struct mbuf *m, bool reverse)
 		if (e->proto == iphdr->proto &&
 		    e->laddr.ip == laddr.ip && e->laddr.port == laddr.port &&
 		    e->raddr.ip == raddr.ip && e->raddr.port == raddr.port) {
+			// log_info("find5: %x", e);
 			return e;
 		}
 	}
@@ -199,6 +201,7 @@ static struct trans_entry *trans_lookup(struct mbuf *m, bool reverse)
 			continue;
 		if (e->proto == iphdr->proto &&
 		    e->laddr.ip == laddr.ip && e->laddr.port == laddr.port) {
+			// log_info("find3: %x", e);
 			return e;
 		}
 	}

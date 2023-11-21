@@ -50,15 +50,16 @@ ifeq ($(CONFIG_DEBUG),y)
 FLAGS += -DDEBUG -rdynamic -O0 -ggdb -mssse3 -muintr
 LDFLAGS += -rdynamic
 else
-# FLAGS += -DNDEBUG -O3
-FLAGS += -DNDEBUG -O3 -mavx2
+FLAGS += -DNDEBUG -O3 -mavx512f
+# FLAGS += -DNDEBUG -O3 -mavx2
 ifeq ($(CONFIG_OPTIMIZE),y)
 FLAGS += -march=native -flto -ffast-math
 ifeq ($(CONFIG_CLANG),y)
 LDFLAGS += -flto
 endif
 else
-FLAGS += -mssse3 -muintr
+# FLAGS += -mssse3 -muintr
+FLAGS += -muintr
 endif
 endif
 ifeq ($(CONFIG_MLX5),y)
@@ -91,6 +92,14 @@ endif
 ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg)
 FLAGS += -DUNSAFE_PREEMPT_SIMDREG
 endif
+ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_sse)
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG_SSE
+endif
+ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_512)
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG
+FLAGS += -DUNSAFE_PREEMPT_SIMDREG_512
+endif
 ifeq ($(CONFIG_UNSAFE_PREEMPT),simdreg_custom)
 FLAGS += -DUNSAFE_PREEMPT_SIMDREG
 FLAGS += -DUNSAFE_PREEMPT_SIMDREG_CUSTOM
@@ -106,6 +115,10 @@ endif
 ifeq ($(CONFIG_PREEMPT),uintr)
 FLAGS += -DUINTR_PREEMPT
 endif 
+ifeq ($(CONFIG_PREEMPT),concord)
+FLAGS += -DCONCORD_PREEMPT
+endif 
+
 
 WRAP_FLAGS = -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc -Wl,-wrap=aligned_alloc -Wl,-wrap=posix_memalign
 ifeq ($(CONFIG_UNSAFE_PREEMPT),flag)
