@@ -7,9 +7,9 @@ inline void DoGet(rocksdb_t *db, rocksdb_readoptions_t *readoptions, char* key, 
     rocksdb_get(db, readoptions, key, key_len, &valuelen, &err);
   // assert(!err);
   // assert(returned_value != NULL && strncmp (returned_value, key, valuelen) == 0);
-  if (err != NULL || returned_value == NULL || strncmp (returned_value, key, valuelen) != 0) {
-    printf("wrong value: %s\n", err);
-  }
+  // if (err != NULL || returned_value == NULL || strncmp (returned_value, key, valuelen) != 0) {
+  //   printf("wrong value: %s\n", err);
+  // }
   free(returned_value);
 }
 

@@ -538,7 +538,7 @@ int main(int argc, char *argv[]) {
   // ret = runtime_init(argv[1], MainHandler_scan, (void*) &flag);
   ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
   // ret = runtime_init(argv[1], MainHandler, NULL);
- //  ret = runtime_init(argv[1], MainHandler_simple2, NULL);
+  // ret = runtime_init(argv[1], MainHandler_simple, NULL);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;
