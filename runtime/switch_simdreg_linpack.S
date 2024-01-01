@@ -8,7 +8,7 @@
  * these values without also updating defs.h.
  */
 
-.file "switch.S"
+.file "switch_simdreg_linpack.S"
 .section        .note.GNU-stack,"",@progbits
 .text
 

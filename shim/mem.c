@@ -37,6 +37,7 @@ void *__wrap_malloc(size_t size) {
 // #endif
     preempt_disable();
 
+    // printf("malloc\n");
     void *p = NULL;
     p = __real_malloc(size);
     
@@ -75,6 +76,7 @@ void __wrap_free(void *ptr) {
 // #endif
     preempt_disable();
 
+    // printf("free\n");
     __real_free(ptr);
     
     // printf("free: %p\n", ptr);
@@ -108,7 +110,7 @@ void *__wrap_calloc(size_t nmemb, size_t size) {
 //     preempt_disable();
 // #endif
     preempt_disable();
-        
+    // printf("calloc\n");
     void *foo = __real_calloc(nmemb, size);
 
     preempt_enable(); 
@@ -135,6 +137,7 @@ void *__wrap_realloc(void *ptr, size_t size) {
 // #endif
     preempt_disable();
 
+    // printf("realloc\n");
     void *foo = __real_realloc(ptr, size);
 
     preempt_enable();
@@ -161,6 +164,7 @@ int __wrap_posix_memalign(void **ptr, size_t alignment, size_t size) {
 // #endif
     preempt_disable();
 
+    // printf("__real_posix_memalign\n");
     int res = __real_posix_memalign(ptr, alignment, size);
 
     preempt_enable(); 
@@ -187,6 +191,7 @@ void* __wrap_aligned_alloc(size_t alignment, size_t size) {
 // #endif
     preempt_disable();
 
+    // printf("__wrap_aligned_alloc\n");
     void *res = __real_aligned_alloc(alignment, size);
 
     preempt_enable(); 
@@ -214,6 +219,7 @@ void* __wrap_memcpy(void *dest, const void *src, size_t n) {
 // #endif
     preempt_disable();
     
+    // printf("__real_memcpy\n");
     void *res = __real_memcpy(dest, src, n);
 
     preempt_enable(); 
@@ -240,6 +246,7 @@ int __wrap_memcmp(const void *s1, const void *s2, size_t n) {
 // #endif
     preempt_disable();
 
+    // printf("__real_memcmp\n");
     int res = __real_memcmp(s1, s2, n);
 
     preempt_enable(); 
@@ -266,6 +273,7 @@ void *__wrap_memmove(void *dest, const void *src, size_t n) {
 // #endif
     preempt_disable();
 
+    // printf("__real_memmove\n");
     void *res = __real_memmove(dest, src, n);
 
     preempt_enable(); 
@@ -292,6 +300,7 @@ void *__wrap_memset(void *s, int c, size_t n) {
 // #endif
     preempt_disable();
 
+    // printf("__real_memset\n");
     void *res = __real_memset(s, c, n);
 
     preempt_enable();
@@ -318,6 +327,7 @@ int __wrap_strcmp(const char* str1, const char* str2) {
 // #endif
     preempt_disable();
 
+    // printf("__real_strcmp\n");
     int res = __real_strcmp(str1, str2);
 
     preempt_enable(); 
@@ -344,6 +354,7 @@ int __wrap_strncmp(const char* str1, const char* str2, size_t num) {
 // #endif
     preempt_disable();
     
+    // printf("__real_strncmp\n");
     int res = __real_strncmp(str1, str2, num);
 
     preempt_enable(); 

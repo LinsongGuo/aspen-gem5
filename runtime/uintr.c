@@ -54,10 +54,10 @@ void concord_func() {
     // if(concord_lock_counter)
     //     return;
     concord_preempt_now = 0;
-    uintr_recv[myk()->kthread_idx]++;
-    
+    // uintr_recv[myk()->kthread_idx]++;
 #if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     if (likely(preempt_enabled())) {
+        // uintr_recv[myk()->kthread_idx]++;
      	thread_yield();
 	}
     else {
@@ -112,11 +112,11 @@ void __attribute__ ((interrupt))
      ui_handler(struct __uintr_frame *ui_frame,
 		unsigned long long vector) {
 		
-	++uintr_recv[vector];
-
+	// ++uintr_recv[vector];        
 #if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     if (likely(preempt_enabled())) {
-     	thread_yield();
+        // ++uintr_recv[vector];
+        thread_yield();
 	}
     else {
         set_upreempt_needed();
@@ -128,8 +128,8 @@ void __attribute__ ((interrupt))
 }
 
 void signal_handler(int signum) {
-    ++uintr_recv[0];
-
+    // uintr_recv[myk()->kthread_idx]++;
+        
 #if defined(UNSAFE_PREEMPT_FLAG) || defined(UNSAFE_PREEMPT_SIMDREG)
     if (!preempt_enabled()) {
 		set_upreempt_needed();
@@ -166,7 +166,7 @@ void* uintr_timer(void*) {
     base_init_thread();
 
     set_thread_affinity(55);
-    
+
 #ifdef SIGNAL_PREEMPT
     signal_block();
 #endif 
@@ -185,7 +185,9 @@ void* uintr_timer(void*) {
 
     long long current;
 #ifdef SIGNAL_PREEMPT
-    for (i = 0; i < (maxks >> 1); ++i) {
+    // for (i = 0; i < (maxks >> 1); ++i) {
+    // for (i = 0; i < maxks/3; ++i) {
+    for (i = 0; i < maxks; ++i) {
 #else 
     for (i = 0; i < maxks; ++i) {
 #endif 
@@ -194,19 +196,20 @@ void* uintr_timer(void*) {
 
     while (uintr_timer_flag != -1) { 
 #ifdef SIGNAL_PREEMPT
-    for (i = 0; i < (maxks >> 1); ++i) {
+        // for (i = 0; i < (maxks >> 1); ++i) {
+        // for (i = 0; i < maxks/3; ++i) {
+        for (i = 0; i < maxks; ++i) {
 #else 
-    for (i = 0; i < maxks; ++i) {
+        for (i = 0; i < maxks; ++i) {
 #endif
             current = now();
-		
             if (!uintr_timer_flag) {
                 ACCESS_ONCE(last[i]) = current;
                 continue;
             }   
             if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
                 if (pending_uthreads(i) || pending_cqe(i)) {
-                    // printf("uipi %d: %lld %lld\n", i, uintr_sent[i], current - ACCESS_ONCE(last[i]));
+                    // printf("kill %d (%d): %lld | %lld, %lld\n", i, kth_tid[i], current - ACCESS_ONCE(last[i]), uintr_sent[i], uintr_recv[i]);
 #ifdef UINTR_PREEMPT
                     _senduipi(uipi_index[i]);
 #elif defined(CONCORD_PREEMPT)
@@ -224,6 +227,7 @@ void* uintr_timer(void*) {
     return NULL;
 }
 
+#ifdef SIGNAL_PREEMPT
 void* signal_timer2(void*) {
     signal_block();
 
@@ -232,10 +236,12 @@ void* signal_timer2(void*) {
     int i;
     long long current;
     for (i = (maxks>>1); i < maxks; ++i) {
+    // for (i = maxks/3; i < maxks/3*2; ++i) {
         ACCESS_ONCE(last[i]) = now();
     }
     while (uintr_timer_flag != -1) {
         for (i = (maxks>>1); i < maxks; ++i) {
+        // for (i = maxks/3; i < maxks/3*2; ++i) {
             current = now();
 		
             if (!uintr_timer_flag) {
@@ -244,7 +250,9 @@ void* signal_timer2(void*) {
             }   
             if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
                 if (pending_uthreads(i) || pending_cqe(i)) {
+                    // printf("kill %d (%d): %lld | %lld, %lld\n", i, kth_tid[i], current - ACCESS_ONCE(last[i]), uintr_sent[i], uintr_recv[i]);
                     pthread_kill(kth_tid[i], SIGUSR1);
+                    sleep_spin(2000);
                     ++uintr_sent[i];
                     ACCESS_ONCE(last[i]) = current;
                 }
@@ -254,6 +262,40 @@ void* signal_timer2(void*) {
 
     return NULL;
 }
+
+void* signal_timer3(void*) {
+    signal_block();
+
+    set_thread_affinity(1);
+    
+    int i;
+    long long current;
+    for (i = maxks/3*2; i < maxks; ++i) {
+        ACCESS_ONCE(last[i]) = now();
+    }
+    while (uintr_timer_flag != -1) {
+        for (i = maxks/3*2; i < maxks; ++i) {
+            current = now();
+		
+            if (!uintr_timer_flag) {
+                ACCESS_ONCE(last[i]) = current;
+                continue;
+            }   
+            if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
+                if (pending_uthreads(i) || pending_cqe(i)) {
+                    // printf("kill %d (%d): %lld | %lld, %lld\n", i, kth_tid[i], current - ACCESS_ONCE(last[i]), uintr_sent[i], uintr_recv[i]);
+                    pthread_kill(kth_tid[i], SIGUSR1);
+                    sleep_spin(1000);
+                    ++uintr_sent[i];
+                    ACCESS_ONCE(last[i]) = current;
+                }
+            }   
+        }
+    } 
+
+    return NULL;
+}
+#endif 
 
 void uintr_timer_start() {
 	uintr_timer_flag = 1;
@@ -271,8 +313,8 @@ int uintr_init(void) {
     memset(uintr_sent, 0, sizeof(uintr_sent));
     memset(uintr_recv, 0, sizeof(uintr_recv));
 
-    // TIMESLICE = atoi(getenv("TIMESLICE")) * 1000L;
-    TIMESLICE = 5 * 1000L;
+    TIMESLICE = atoi(getenv("TIMESLICE")) * 1000L;
+    // TIMESLICE = 5 * 1000L;
 	log_info("TIMESLICE: %lld us", TIMESLICE / 1000);
     return 0;
 }
@@ -316,10 +358,15 @@ int uintr_init_late(void) {
     log_info("UINTR timer pthread creates");
 
 #ifdef SIGNAL_PREEMPT
-    pthread_t timer_thread2;
-    int ret2 = pthread_create(&timer_thread2, NULL, signal_timer2, NULL);
-	BUG_ON(ret2);
-    log_info("Signal timer pthread2 creates");
+    // pthread_t timer_thread2;
+    // int ret2 = pthread_create(&timer_thread2, NULL, signal_timer2, NULL);
+	// BUG_ON(ret2);
+    // log_info("Signal timer pthread2 creates");
+
+    // pthread_t timer_thread3;
+    // int ret3 = pthread_create(&timer_thread3, NULL, signal_timer3, NULL);
+	// BUG_ON(ret3);
+    // log_info("Signal timer pthread3 creates");
 #endif
 
     return 0;

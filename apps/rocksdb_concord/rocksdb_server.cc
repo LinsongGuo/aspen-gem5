@@ -420,12 +420,12 @@ void MainHandler_simple2(void *arg) {
   for (int i = 0; i < task_num; ++i) {
 		rt::Spawn([&, i]() {
 			started += 1;
-      // if (i & 1)
       // scan_test();
-      // else 
-      scan_test();
-      // hybrid_test();
 
+      long long start_ = now();
+      get_test();
+      long long end_ = now();
+      printf("get: %.3f us\n", 1.*(end_-start_)/N/300/1000);
       finished += 1;
       if (finished == task_num) {
 				rt::UintrTimerEnd();
@@ -465,7 +465,7 @@ void MainHandler_udpconn(void *arg) {
   
   wramup();
 
-  for (int port = 0; port < 12; ++port) {
+  for (int port = 0; port < 4; ++port) {
     udpconn_t *c;
     ssize_t ret;
     listen_addr.port = 5000 + port;
@@ -536,9 +536,9 @@ int main(int argc, char *argv[]) {
 
   // bool flag = 1;
   // ret = runtime_init(argv[1], MainHandler_scan, (void*) &flag);
-  ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
+  // ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
   // ret = runtime_init(argv[1], MainHandler, NULL);
-  // ret = runtime_init(argv[1], MainHandler_simple, NULL);
+  ret = runtime_init(argv[1], MainHandler_simple2, NULL);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
     return ret;
@@ -547,3 +547,7 @@ int main(int argc, char *argv[]) {
   // MainHandler(NULL);
   return 0;
 }
+
+// get: 0.715
+// get concord: 0.721
+// get concordfl: 0.790 

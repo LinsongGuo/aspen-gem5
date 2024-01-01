@@ -137,7 +137,7 @@ void get_test() {
 void scan_test() {
   char *err = NULL;
   rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
-  for (int i = 0; i < 3000; i++) {
+  for (int i = 0; i < 10000; i++) {
     DoScan(readoptions);
   }
   rocksdb_readoptions_destroy(readoptions);
@@ -202,7 +202,7 @@ static void HandleLoop(udpconn_t *c) {
 	ssize_t ret, len;
 	struct netaddr addr;
 
-	while (true) {
+  while (true) {
 		ret = udp_read_from(c, buf, sizeof(Payload), &addr);
     assert(ret == sizeof(Payload));
     // printf("read ret = %ld\n", ret);
@@ -413,7 +413,7 @@ void MainHandler_simple2(void *arg) {
   rocksdb_init();
   PutInit();
 
-  const int task_num = 24;
+  const int task_num = 1;
 
   rt::UintrTimerStart();
   _stui();
@@ -720,7 +720,7 @@ void MainHandler_udpconn(void *arg) {
 	// 	return;
 	// }
 
-  for (int port = 0; port < 4; ++port) {
+  for (int port = 0; port < 1; ++port) {
     udpconn_t *c;
     ssize_t ret;
     listen_addr.port = 5000 + port;
@@ -731,6 +731,7 @@ void MainHandler_udpconn(void *arg) {
     }
     
     for (int i = 0; i < 32; ++i) {
+      printf("for %d\n", i);
       rt::Spawn([&, c]() {
         HandleLoop(c);
       });
@@ -787,8 +788,8 @@ int main(int argc, char *argv[]) {
 
   // bool flag = 1;
   // ret = runtime_init(argv[1], MainHandler_scan, (void*) &flag);
-  ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
-  // ret = runtime_init(argv[1], MainHandler, NULL);
+  // ret = runtime_init(argv[1], MainHandler_udpconn, NULL);
+  ret = runtime_init(argv[1], MainHandler, NULL);
   // ret = runtime_init(argv[1], MainHandler_simple2, NULL);
   if (ret) {
     std::cerr << "failed to start runtime" << std::endl;
@@ -798,3 +799,8 @@ int main(int argc, char *argv[]) {
   // MainHandler(NULL);
   return 0;
 }
+
+
+// % native: 267,  0.648
+// % clui: 493, 1.452
+// % flag: 302, 0.732

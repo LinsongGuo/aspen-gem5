@@ -111,7 +111,6 @@ static inline void preempt_enable_nocheck(void)
  */
 static inline void preempt_enable(void)
 {
-	// printf("enable\n");
 #ifndef __GCC_ASM_FLAG_OUTPUTS__
 	preempt_enable_nocheck();
 	#ifdef UNSAFE_PREEMPT_CLUI

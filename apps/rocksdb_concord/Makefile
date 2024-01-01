@@ -10,6 +10,7 @@ CXX=clang++-$(LLVM_VERSION)
 CFLAGS=-O3 -g -Wall -D_GNU_SOURCE -Wno-sync-fetch-and-nand-semantics-changed
 PASS_FLAGS=-c -emit-llvm
 WRAP_FLAGS=-Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc -Wl,-wrap=aligned_alloc -Wl,-wrap=posix_memalign
+# WRAP_FLAGS += -Wl,-wrap=memcpy -Wl,-wrap=memcmp -Wl,-wrap=memmove -Wl,-wrap=memset -Wl,-wrap=strcmp -Wl,-wrap=strncmp   # rmb to uncomment
 
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 

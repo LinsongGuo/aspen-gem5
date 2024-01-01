@@ -943,7 +943,6 @@ void thread_exit(void)
  */
 static __noreturn void schedule_start(void)
 {
-	// log_info("sizeof(thread_tf): %ld", sizeof(struct thread_tf));
 	struct kthread *k = myk();
 
 	/*

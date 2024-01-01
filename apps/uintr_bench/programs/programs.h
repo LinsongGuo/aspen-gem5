@@ -1,6 +1,8 @@
 #ifndef PROGRAMS_H
 #define PROGRAMS_H
 
+long long malloctest();
+
 long long base64();
 void base64_init();
 

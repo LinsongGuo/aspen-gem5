@@ -21,10 +21,10 @@ namespace {
 
 typedef long long (*bench_type)(void);
 
-const int BENCH_NUM = 8;
+const int BENCH_NUM = 9;
 std::string worker_spec;
-std::string bench_name[BENCH_NUM] = {"mcf", "linpack", "base64", "matmul", "matmul_int", "sum", "array", "cmp"};
-bench_type bench_ptr[BENCH_NUM] = {mcf, linpack, base64, matmul, matmul_int, sum, array, cmp};
+std::string bench_name[BENCH_NUM] = {"mcf", "linpack", "base64", "matmul", "matmul_int", "sum", "array", "cmp", "malloctest"};
+bench_type bench_ptr[BENCH_NUM] = {mcf, linpack, base64, matmul, matmul_int, sum, array, cmp, malloctest};
 std::vector<std::string> task_name;
 std::vector<bench_type> task_ptr;
 long long task_result[128];
@@ -63,7 +63,7 @@ bench_type name2ptr(std::string name) {
 // }
 
 void parse(std::string input) {
-    char delimiter = '*';
+	char delimiter = '*';
     std::stringstream ss(input);
     std::string name, num_;
 
@@ -89,7 +89,7 @@ void MainHandler(void *arg) {	// printf("enter handler\n");
 	barrier_init(&barrier, 1);
 	
 	// Init functions for benchmarks.
-  	// base64_init();
+  	base64_init();
 	// cmp_init();
 	
 	rt::UintrTimerStart();
