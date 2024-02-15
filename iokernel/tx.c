@@ -49,9 +49,10 @@ static void tx_prepare_tx_mbuf(struct rte_mbuf *buf,
 			       struct thread *th)
 {
 	struct proc *p = th->p;
-	uint32_t page_number;
 	struct tx_pktmbuf_priv *priv_data;
 
+#ifndef SIMULATED_NIC
+	uint32_t page_number;
 	/* initialize mbuf to point to net_hdr->payload */
 	buf->buf_addr = (char *)net_hdr->payload;
 	page_number = PGN_2MB((uintptr_t)buf->buf_addr - (uintptr_t)p->region.base);
@@ -62,6 +63,11 @@ static void tx_prepare_tx_mbuf(struct rte_mbuf *buf,
 	buf->buf_len = net_hdr->len;
 	buf->pkt_len = net_hdr->len;
 	buf->data_len = net_hdr->len;
+#else 
+	BUG_ON(rte_pktmbuf_data_len(buf) > 0);
+	char* mbuf_payload = (char*) rte_pktmbuf_append(buf, net_hdr->len);
+	rte_memcpy(mbuf_payload, (char*) net_hdr->payload, net_hdr->len);
+#endif
 
 	buf->ol_flags = 0;
 	if (net_hdr->olflags != 0) {
@@ -226,10 +232,16 @@ static int tx_drain_queue(struct thread *t, int n,
 /*
  * Process a batch of outgoing packets.
  */
+#ifndef SIMULATED_NIC
 bool tx_burst(void)
+#else
+bool tx_burst(struct rte_mbuf **bufs, uint32_t *n_bufs_ptr)
+#endif
 {
 	const struct tx_net_hdr *hdrs[IOKERNEL_TX_BURST_SIZE];
+#ifndef SIMULATED_NIC
 	static struct rte_mbuf *bufs[IOKERNEL_TX_BURST_SIZE];
+#endif
 	struct thread *threads[IOKERNEL_TX_BURST_SIZE];
 	int i, j, ret, pulltotal = 0;
 	static unsigned int pos = 0, n_pkts = 0, n_bufs = 0;
@@ -263,8 +275,13 @@ full:
 
 	/* allocate mbufs */
 	if (n_pkts - n_bufs > 0) {
+#ifndef SIMULATED_NIC
 		ret = rte_mempool_get_bulk(tx_mbuf_pool, (void **)&bufs[n_bufs],
 					n_pkts - n_bufs);
+#else
+		ret = rte_pktmbuf_alloc_bulk(dp.rx_mbuf_pool, (void **)&bufs[n_bufs],
+					n_pkts - n_bufs);
+#endif
 		if (unlikely(ret)) {
 			stats[TX_COMPLETION_FAIL] += n_pkts - n_bufs;
 			log_warn_ratelimited("tx: error getting %d mbufs from mempool", n_pkts - n_bufs);
@@ -281,6 +298,7 @@ full:
 
 	n_bufs = n_pkts;
 
+#ifndef SIMULATED_NIC
 	/* finally, send the packets on the wire */
 	ret = rte_eth_tx_burst(dp.port, 0, bufs, n_pkts);
 	log_debug("tx: transmitted %d packets on port %d", ret, dp.port);
@@ -294,7 +312,13 @@ full:
 	} else {
 		n_pkts = 0;
 	}
-
+#else 
+	for (i = 0; i < n_pkts; ++i) {
+		tx_send_completion(bufs[i]);
+	}
+	*n_bufs_ptr = n_pkts;
+	n_pkts = 0;
+#endif
 	n_bufs = n_pkts;
 	return true;
 }

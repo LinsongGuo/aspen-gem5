@@ -119,6 +119,13 @@ ifeq ($(CONFIG_PREEMPT),concord)
 FLAGS += -DCONCORD_PREEMPT
 endif 
 
+ifeq ($(CONFIG_SMART_PREEMPT), y)
+FLAGS += -DSMART_PREEMPT
+endif
+
+ifeq ($(CONFIG_SIMULATED_NIC), y)
+FLAGS += -DSIMULATED_NIC
+endif
 
 WRAP_FLAGS = -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc -Wl,-wrap=aligned_alloc -Wl,-wrap=posix_memalign
 ifeq ($(CONFIG_UNSAFE_PREEMPT),flag)

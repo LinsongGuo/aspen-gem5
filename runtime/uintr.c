@@ -163,6 +163,8 @@ void uintr_timer_upd(int kidx) {
 }
 
 void* uintr_timer(void*) {
+    _clui();
+
     base_init_thread();
 
     set_thread_affinity(55);
@@ -208,7 +210,9 @@ void* uintr_timer(void*) {
                 continue;
             }   
             if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
+#ifdef SMART_PREEMPT
                 if (pending_uthreads(i) || pending_cqe(i)) {
+#endif
                     // printf("kill %d (%d): %lld | %lld, %lld\n", i, kth_tid[i], current - ACCESS_ONCE(last[i]), uintr_sent[i], uintr_recv[i]);
 #ifdef UINTR_PREEMPT
                     _senduipi(uipi_index[i]);
@@ -219,7 +223,9 @@ void* uintr_timer(void*) {
 #endif
                     ++uintr_sent[i];
                     ACCESS_ONCE(last[i]) = current;
+#ifdef SMART_PREEMPT
                 }
+#endif
             }   
         }
     } 
@@ -249,13 +255,17 @@ void* signal_timer2(void*) {
                 continue;
             }   
             if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
+#ifdef SMART_PREEMPT
                 if (pending_uthreads(i) || pending_cqe(i)) {
+#endif
                     // printf("kill %d (%d): %lld | %lld, %lld\n", i, kth_tid[i], current - ACCESS_ONCE(last[i]), uintr_sent[i], uintr_recv[i]);
                     pthread_kill(kth_tid[i], SIGUSR1);
                     sleep_spin(2000);
                     ++uintr_sent[i];
                     ACCESS_ONCE(last[i]) = current;
+#ifdef SMART_PREEMPT
                 }
+#endif
             }   
         }
     } 
@@ -282,13 +292,17 @@ void* signal_timer3(void*) {
                 continue;
             }   
             if (current - ACCESS_ONCE(last[i]) >= TIMESLICE) {
+#ifdef SMART_PREEMPT
                 if (pending_uthreads(i) || pending_cqe(i)) {
+#endif
                     // printf("kill %d (%d): %lld | %lld, %lld\n", i, kth_tid[i], current - ACCESS_ONCE(last[i]), uintr_sent[i], uintr_recv[i]);
                     pthread_kill(kth_tid[i], SIGUSR1);
                     sleep_spin(1000);
                     ++uintr_sent[i];
                     ACCESS_ONCE(last[i]) = current;
+#ifdef SMART_PREEMPT
                 }
+#endif
             }   
         }
     } 
@@ -300,7 +314,6 @@ void* signal_timer3(void*) {
 void uintr_timer_start() {
 	uintr_timer_flag = 1;
     start = now();
-    _stui();
 }
 
 void uintr_timer_end() {
@@ -314,7 +327,6 @@ int uintr_init(void) {
     memset(uintr_recv, 0, sizeof(uintr_recv));
 
     TIMESLICE = atoi(getenv("TIMESLICE")) * 1000L;
-    // TIMESLICE = 5 * 1000L;
 	log_info("TIMESLICE: %lld us", TIMESLICE / 1000);
     return 0;
 }

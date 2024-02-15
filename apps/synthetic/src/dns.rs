@@ -1,4 +1,3 @@
-use Buffer;
 use Connection;
 use LoadgenProtocol;
 use Packet;
@@ -52,11 +51,7 @@ impl DnsProtocol {
 }
 
 impl LoadgenProtocol for DnsProtocol {
-    fn uses_ordered_requests(&self) -> bool {
-        false
-    }
-
-    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) {
+    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) -> u64 {
         let h = Header {
             id: i as u16,
             query: true,
@@ -93,10 +88,11 @@ impl LoadgenProtocol for DnsProtocol {
         buf.write_u16::<BigEndian>(QueryType::A as u16).unwrap();
         buf.write_u16::<BigEndian>(QueryClass::IN as u16 | 0x8000)
             .unwrap();
+
+        return 0;
     }
 
-    fn read_response(&self, mut sock: &Connection, buf: &mut Buffer) -> io::Result<(usize, u64)> {
-        let scratch = buf.get_empty_buf();
+    fn read_response(&self, mut sock: &Connection, scratch: &mut [u8]) -> io::Result<(usize, u64)> {
         let len = sock.read(&mut scratch[..])?;
         if len == 0 {
             return Err(Error::new(ErrorKind::UnexpectedEof, "eof"));

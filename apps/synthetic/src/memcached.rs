@@ -3,7 +3,6 @@ use clap::Arg;
 use std::io;
 use std::io::{Error, ErrorKind, Read};
 
-use Buffer;
 use Connection;
 use LoadgenProtocol;
 use Packet;
@@ -185,18 +184,14 @@ impl MemcachedProtocol {
 }
 
 impl LoadgenProtocol for MemcachedProtocol {
-    fn uses_ordered_requests(&self) -> bool {
-        true
-    }
-
-    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) {
+    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) -> u64 {
         // Use first 32 bits of randomness to determine if this is a SET or GET req
         let low32 = p.randomness & 0xffffffff;
         let key = (p.randomness >> 32) % self.nvalues;
 
         if low32 % 1000 < self.pct_set {
             self.set_request(key, i as u32, buf);
-            return;
+            return 0;
         }
 
         if let Transport::Udp = self.tport {
@@ -215,10 +210,11 @@ impl LoadgenProtocol for MemcachedProtocol {
         .unwrap();
 
         write_key(buf, key, self.key_size);
+        
+        return 0;
     }
 
-    fn read_response(&self, mut sock: &Connection, buf: &mut Buffer) -> io::Result<(usize, u64)> {
-        let scratch = buf.get_empty_buf();
+    fn read_response(&self, mut sock: &Connection, scratch: &mut [u8]) -> io::Result<(usize, u64)> {
         let hdr = match self.tport {
             Transport::Udp => {
                 let len = sock.read(&mut scratch[..32])?;
@@ -247,6 +243,6 @@ impl LoadgenProtocol for MemcachedProtocol {
                 format!("Not NoError {}", hdr.vbucket_id_or_status),
             ));
         }
-        Ok((0, hdr.cas))
+        Ok((hdr.opaque as usize, hdr.cas))
     }
 }

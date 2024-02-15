@@ -88,8 +88,10 @@ static __noreturn void jmp_thread(thread_t *th)
 			cpu_relax();
 	}
 	th->thread_running = true;
+#ifdef SMART_PREEMPT
 	uintr_timer_upd(myk()->kthread_idx);
 	barrier();
+#endif
 	__jmp_thread(&th->tf);
 }
 

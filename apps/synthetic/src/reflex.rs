@@ -8,7 +8,6 @@ use rand::distributions::{IndependentSample, Range};
 use rand::{Rng, SeedableRng};
 use std::cmp::min;
 
-use Buffer;
 use Connection;
 use Distribution;
 use LoadgenProtocol;
@@ -141,11 +140,7 @@ impl ReflexProtocol {
 }
 
 impl LoadgenProtocol for ReflexProtocol {
-    fn uses_ordered_requests(&self) -> bool {
-        false
-    }
-
-    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) {
+    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) -> u64 {
         let mut rng: MersenneTwister = SeedableRng::from_seed(p.randomness);
         let lba = (rng.gen::<u64>() % NUM_SECTORS) & LBA_ALIGNMENT;
         let mut lbacount = self.sectors_per_rq.sample(&mut rng);
@@ -156,7 +151,7 @@ impl LoadgenProtocol for ReflexProtocol {
 
         if Range::new(0, 1000).ind_sample(&mut rng) < self.pct_set {
             self.set_request(lba, lbacount as usize, i, buf);
-            return;
+            return 0;
         }
 
         PacketHeader {
@@ -168,10 +163,11 @@ impl LoadgenProtocol for ReflexProtocol {
         }
         .write(buf)
         .unwrap();
+
+        return 0;
     }
 
-    fn read_response(&self, mut sock: &Connection, buf: &mut Buffer) -> io::Result<(usize, u64)> {
-        let scratch = buf.get_empty_buf();
+    fn read_response(&self, mut sock: &Connection, scratch: &mut [u8]) -> io::Result<(usize, u64)> {
         sock.read_exact(&mut scratch[..REFLEX_HDR_SZ])?;
         let hdr = PacketHeader::read(&mut &scratch[..])?;
         if hdr.opcode == Opcode::Get as u16 {

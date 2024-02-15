@@ -106,12 +106,20 @@ void dataplane_loop(void)
 			rte_lcore_id());
 	fflush(stdout);
 
+	struct rte_mbuf *bufs[IOKERNEL_TX_BURST_SIZE];
+	uint32_t n_bufs = 0;
+	uint32_t *n_bufs_ptr = &n_bufs;
+
 	/* run until quit or killed */
 	for (;;) {
 		work_done = false;
 
 		/* handle a burst of ingress packets */
+#ifndef SIMULATED_NIC
 		work_done |= rx_burst();
+#else
+		work_done |= rx_burst(bufs, n_bufs_ptr);
+#endif
 
 		/* adjust core assignments */
 		sched_poll();
@@ -120,7 +128,11 @@ void dataplane_loop(void)
 		work_done |= tx_drain_completions();
 
 		/* send a burst of egress packets */
+#ifndef SIMULATED_NIC
 		work_done |= tx_burst();
+#else
+		work_done |= tx_burst(bufs, n_bufs_ptr);
+#endif
 
 		/* process a batch of commands from runtimes */
 		work_done |= commands_rx();

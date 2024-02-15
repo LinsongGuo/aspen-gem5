@@ -198,11 +198,13 @@ static void net_rx_one(struct mbuf *m)
 	if (unlikely(!iphdr))
 		goto drop;
 
+#ifndef SIMULATED_NIC
 	/* Did HW checksum verification pass? */
 	if (m->csum_type != CHECKSUM_TYPE_UNNECESSARY) {
 		if (chksum_internet(iphdr, sizeof(*iphdr)))
 			goto drop;
 	}
+#endif
 
 	if (unlikely(!ip_hdr_supported(iphdr)))
 		goto drop;

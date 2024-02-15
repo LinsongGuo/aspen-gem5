@@ -406,8 +406,13 @@ extern pthread_barrier_t init_barrier;
 /*
  * dataplane RX/TX functions
  */
+#ifndef SIMULATED_NIC
 extern bool rx_burst(void);
 extern bool tx_burst(void);
+#else 
+extern bool tx_burst(struct rte_mbuf**, uint32_t*);
+extern bool rx_burst(struct rte_mbuf**, uint32_t*);
+#endif
 extern bool tx_send_completion(void *obj);
 extern bool tx_drain_completions(void);
 

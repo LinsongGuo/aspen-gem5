@@ -157,16 +157,26 @@ fail_free:
 /*
  * Process a batch of incoming packets.
  */
+#ifndef SIMULATED_NIC
 bool rx_burst(void)
+#else
+bool rx_burst(struct rte_mbuf **bufs, uint32_t *n_bufs_ptr)
+#endif
 {
+#ifndef SIMULATED_NIC
 	struct rte_mbuf *bufs[IOKERNEL_RX_BURST_SIZE];
+#endif
 	uint16_t nb_rx, i;
 
+#ifndef SIMULATED_NIC
 	/* retrieve packets from NIC queue */
 	nb_rx = rte_eth_rx_burst(dp.port, 0, bufs, IOKERNEL_RX_BURST_SIZE);
 	STAT_INC(RX_PULLED, nb_rx);
 	if (nb_rx > 0)
 		log_debug("rx: received %d packets on port %d", nb_rx, dp.port);
+#else
+	nb_rx = *n_bufs_ptr;
+#endif
 
 	for (i = 0; i < nb_rx; i++) {
 		if (i + RX_PREFETCH_STRIDE < nb_rx) {
@@ -176,6 +186,9 @@ bool rx_burst(void)
 		rx_one_pkt(bufs[i]);
 	}
 
+#ifdef SIMULATED_NIC
+	*n_bufs_ptr = 0;
+#endif
 	return nb_rx > 0;
 }
 

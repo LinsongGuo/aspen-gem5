@@ -20,13 +20,15 @@ use arrayvec::ArrayVec;
 use std::collections::BTreeMap;
 use std::f32::INFINITY;
 use std::io;
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::slice;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use std::fs::{File, OpenOptions};
 
 use clap::{App, Arg};
 use itertools::Itertools;
@@ -41,6 +43,8 @@ use backend::*;
 mod payload;
 use payload::{Payload, SyntheticProtocol, PAYLOAD_SIZE};
 
+use rocksdb::ReqType;
+
 #[derive(Default)]
 pub struct Packet {
     work_iterations: u64,
@@ -50,6 +54,9 @@ pub struct Packet {
     completion_time_ns: AtomicU64,
     completion_server_tsc: Option<u64>,
     completion_time: Option<Duration>,
+    // added by ZL
+    server_lat: Option<u64>,
+    req_type: u64,
 }
 
 mod fakework;
@@ -64,8 +71,14 @@ use dns::DnsProtocol;
 mod reflex;
 use reflex::ReflexProtocol;
 
-mod http;
-use http::HttpProtocol;
+mod rocksdb;
+use rocksdb::RocksDBProtocol;
+
+mod leveldb;
+use leveldb::LevelDBProtocol;
+
+mod buf;
+use buf::BufProtocol;
 
 #[derive(Copy, Clone, Debug)]
 enum Distribution {
@@ -125,73 +138,11 @@ pub enum Transport {
     Tcp,
 }}
 
-pub struct Buffer<'a> {
-    buf: &'a mut [u8],
-    head: usize,
-    tail: usize,
-}
-
-impl<'a> Buffer<'a> {
-    pub fn new(inbuf: &mut [u8]) -> Buffer {
-        Buffer {
-            buf: inbuf,
-            head: 0,
-            tail: 0,
-        }
-    }
-
-    pub fn data_size(&self) -> usize {
-        self.head - self.tail
-    }
-
-    pub fn get_data(&self) -> &[u8] {
-        &self.buf[self.tail..self.head]
-    }
-
-    pub fn push_data(&mut self, size: usize) {
-        self.head += size;
-        assert!(self.head <= self.buf.len());
-    }
-
-    pub fn pull_data(&mut self, size: usize) {
-        assert!(size <= self.data_size());
-        self.tail += size;
-    }
-
-    pub fn get_free_space(&self) -> usize {
-        self.buf.len() - self.head
-    }
-
-    pub fn get_empty_buf(&mut self) -> &mut [u8] {
-        &mut self.buf[self.head..]
-    }
-
-    pub fn try_shrink(&mut self) -> io::Result<()> {
-        if self.data_size() == 0 {
-            self.head = 0;
-            self.tail = 0;
-            return Ok(());
-        }
-
-        if self.head < self.buf.len() {
-            return Ok(());
-        }
-
-        if self.data_size() == self.buf.len() {
-            return Err(Error::new(ErrorKind::Other, "Need larger buffers"));
-        }
-
-        self.buf.as_mut().copy_within(self.tail..self.head, 0);
-        self.head = self.data_size();
-        self.tail = 0;
-        Ok(())
-    }
-}
-
 trait LoadgenProtocol: Send + Sync {
-    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>);
-    fn uses_ordered_requests(&self) -> bool;
-    fn read_response(&self, sock: &Connection, scratch: &mut Buffer) -> io::Result<(usize, u64)>;
+    fn gen_req(&self, i: usize, p: &Packet, buf: &mut Vec<u8>) -> u64;
+    fn read_response(&self, sock: &Connection, scratch: &mut [u8]) -> io::Result<(usize, u64)>;
+    // added by ZL
+    fn read_response_w_server_lat(&self, sock: &Connection, scratch: &mut [u8]) -> io::Result<(usize, u64, u64)> {Ok((0 as usize, 0 as u64, 0 as u64))}
 }
 
 arg_enum! {
@@ -200,8 +151,10 @@ enum OutputMode {
     Silent,
     Normal,
     Buckets,
-    Trace,
-    Live
+    // adde by ZL
+    PerTypeBuckets,
+    PerTypeServerBuckets,
+    Trace
 }}
 
 fn duration_to_ns(duration: Duration) -> u64 {
@@ -254,7 +207,8 @@ fn socket_worker(socket: &mut Connection, worker: Arc<FakeWorker>) {
                 _ => {}
             }
             if e.kind() != ErrorKind::UnexpectedEof {
-                println!("Receive thread: {}", e);
+                println!("
+                {}", e);
             }
             break;
         }
@@ -278,18 +232,15 @@ fn run_tcp_server(backend: Backend, addr: SocketAddrV4, worker: Arc<FakeWorker>)
 }
 
 fn run_spawner_server(addr: SocketAddrV4, workerspec: &str) {
-    println!("################ run_spawner_server");
     static mut SPAWNER_WORKER: Option<FakeWorker> = None;
     unsafe {
         SPAWNER_WORKER = Some(FakeWorker::create(workerspec).unwrap());
     }
     extern "C" fn echo(d: *mut shenango::ffi::udp_spawn_data) {
         unsafe {
-            // println!("##### rcv: {}", (*d).len);
             let buf = slice::from_raw_parts((*d).buf as *mut u8, (*d).len as usize);
             let mut payload = Payload::deserialize(&mut &buf[..]).unwrap();
             let worker = SPAWNER_WORKER.as_ref().unwrap();
-            // println!("##### work");
             worker.work(payload.work_iterations, payload.randomness);
             payload.randomness = shenango::rdtsc();
             let mut array = ArrayVec::<_, PAYLOAD_SIZE>::new();
@@ -335,7 +286,6 @@ fn run_memcached_preload(
 
                 let mut vec_s: Vec<u8> = Vec::with_capacity(4096);
                 let mut vec_r: Vec<u8> = vec![0; 4096];
-                let mut buf = Buffer::new(&mut vec_r[..]);
                 for n in 0..perthread {
                     vec_s.clear();
                     proto.set_request((i * perthread + n) as u64, 0, &mut vec_s);
@@ -345,7 +295,7 @@ fn run_memcached_preload(
                         return false;
                     }
 
-                    if let Err(e) = proto.read_response(&sock1, &mut buf) {
+                    if let Err(e) = proto.read_response(&sock1, &mut vec_r[..]) {
                         println!("preload receive ({}/{}): {}", n, perthread, e);
                         return false;
                     }
@@ -396,6 +346,12 @@ struct ScheduleResult {
     latencies: BTreeMap<u64, usize>,
     first_tsc: Option<u64>,
     trace: Option<Vec<TraceResult>>,
+    //added by ZL
+    per_type_latencies: BTreeMap<u64, BTreeMap<u64, usize>>,
+    per_type_server_latencies: BTreeMap<u64, BTreeMap<u64, usize>>,
+    per_type_packet_count: BTreeMap<u64, usize>,
+    per_type_drop_count: BTreeMap<u64, usize>,
+    per_type_never_sent: BTreeMap<u64, usize>,
 }
 
 fn gen_classic_packet_schedule(
@@ -408,6 +364,8 @@ fn gen_classic_packet_schedule(
     discard_pct: f32,
 ) -> Vec<RequestSchedule> {
     let mut sched: Vec<RequestSchedule> = Vec::new();
+
+    // println!("packets_per_second: {}", packets_per_second);
 
     /* Ramp up in 100ms increments */
     for t in 1..(10 * ramp_up_seconds) {
@@ -471,14 +429,38 @@ fn gen_loadshift_experiment(
         .collect()
 }
 
+fn init_file(filename: &str) -> io::Result<()> {
+    let mut file = File::create(filename)?;
+    file.set_len(0)?; 
+    Ok(())
+}
+
+fn write_line_to_file(line: &str, filename: &str) -> io::Result<()> {
+    let mut file = OpenOptions::new()
+    .append(true)
+    .create(true)
+    .open(filename)?;
+
+    writeln!(file, "{}", line)?;
+
+    Ok(())
+}
+
 fn process_result_final(
     sched: &RequestSchedule,
     results: Vec<ScheduleResult>,
     wct_start: SystemTime,
     sched_start: Duration,
+    resultpath: &String,
 ) -> bool {
     let mut buckets: BTreeMap<u64, usize> = BTreeMap::new();
-
+    // added by ZL
+    let mut per_type_buckets: BTreeMap<u64, BTreeMap<u64, usize>> = BTreeMap::new();
+    let mut per_type_server_buckets: BTreeMap<u64, BTreeMap<u64, usize>> = BTreeMap::new();
+    let mut per_type_packet_count: BTreeMap<u64, usize> = BTreeMap::new();
+    let mut per_type_drop_count: BTreeMap<u64, usize> = BTreeMap::new();
+    let mut per_type_never_sent: BTreeMap<u64, usize> = BTreeMap::new();
+    
     let packet_count = results.iter().map(|res| res.packet_count).sum::<usize>();
     let drop_count = results.iter().map(|res| res.drop_count).sum::<usize>();
     let never_sent_count = results
@@ -494,10 +476,13 @@ fn process_result_final(
         return true;
     }
 
+    // println!("packet_count: {}", packet_count);
+
     if packet_count <= 1 {
         println!(
-            "{}, {}, 0, {}, {}, {}",
+            "{}, {}, {}, 0, {}, {}, {}",
             sched.service.name(),
+            sched.rps,
             sched.rps,
             drop_count,
             never_sent_count,
@@ -509,6 +494,40 @@ fn process_result_final(
     results.iter().for_each(|res| {
         for (k, v) in &res.latencies {
             *buckets.entry(*k).or_insert(0) += v;
+        }
+        // added by ZL
+        for (jtype, latencies) in &res.per_type_latencies {
+            for (k, v) in latencies {
+                *per_type_buckets
+                    .entry(*jtype)
+                    .or_insert(BTreeMap::new())
+                    .entry(*k)
+                    .or_insert(0) += v;
+            }
+        }
+        for (jtype, latencies) in &res.per_type_server_latencies {
+            for (k, v) in latencies {
+                *per_type_server_buckets
+                    .entry(*jtype)
+                    .or_insert(BTreeMap::new())
+                    .entry(*k)
+                    .or_insert(0) += v;
+            }
+        }
+        for (jtype, count) in &res.per_type_packet_count {
+            *per_type_packet_count
+                .entry(*jtype)
+                .or_insert(0) += *count;
+        }
+        for (jtype, count) in &res.per_type_drop_count {
+            *per_type_drop_count
+                .entry(*jtype)
+                .or_insert(0) += *count;
+        }
+        for (jtype, count) in &res.per_type_never_sent {
+            *per_type_never_sent
+                .entry(*jtype)
+                .or_insert(0) += *count;
         }
     });
 
@@ -528,42 +547,120 @@ fn process_result_final(
         return INFINITY;
     };
 
+    let percentile2 = |jtype: u64, p: f32| {
+        if let Some(buckets) = per_type_buckets.get(&jtype) {
+            if let Some(&count) = per_type_packet_count.get(&jtype) {
+                if let Some(&dropped) = per_type_drop_count.get(&jtype) {
+                    let idx = ((count + dropped) as f32 * p / 100.0) as usize;        
+                    // println!("count: {}, {}", count, dropped);
+                    if idx >= count {
+                        return INFINITY;
+                    }
+
+                    let mut seen = 0;
+                    for k in buckets.keys() {
+                        seen += buckets[k];
+                        if seen >= idx {
+                            return *k as f32;
+                        }
+                    }
+                }
+            } 
+        }
+        return INFINITY;
+    };
+
     let last_send = last_send.unwrap();
     let first_send = first_send.unwrap();
     let first_tsc = first_tsc.unwrap();
     let start_unix = wct_start + first_send;
 
-    if let OutputMode::Live = sched.output {
-        println!(
-            "RPS: {}\tMedian (us): {: <7}\t99th (us): {: <7}\t99.9th (us): {: <7}",
-            sched.rps,
-            percentile(50.0) as usize,
-            percentile(99.0) as usize,
-            percentile(99.9) as usize
-        );
-        return true;
-    }
-
-    println!(
-        "{}, {}, {}, {}, {}, {:.1}, {:.1}, {:.1}, {:.1}, {:.1}, {}, {}",
+    let total_line = format!(
+        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}, {}, {}",
         sched.service.name(),
+        sched.rps,
         (packet_count + drop_count) as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
         packet_count as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        packet_count,
         drop_count,
         never_sent_count,
-        percentile(50.0),
-        percentile(90.0),
-        percentile(99.0),
-        percentile(99.9),
-        percentile(99.99),
+        percentile(50.0) / 1000.0,
+        percentile(90.0) / 1000.0,
+        percentile(99.0) / 1000.0,
+        percentile(99.9) / 1000.0,
+        percentile(99.99) / 1000.0,
         start_unix.duration_since(UNIX_EPOCH).unwrap().as_secs(),
         first_tsc
     );
+    println!("{}", total_line);
+    let _ = write_line_to_file(&total_line, &format!("{}/total.csv", resultpath));
+
+    let get_count = *per_type_packet_count.get(&(ReqType::Get as u64)).unwrap_or(&0);
+    let get_drop = *per_type_drop_count.get(&(ReqType::Get as u64)).unwrap_or(&0);
+    let get_never_sent = *per_type_never_sent.get(&(ReqType::Get as u64)).unwrap_or(&0);
+    let get_line = format!(
+        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}",
+        sched.service.name(),
+        sched.rps,
+        (get_count + get_drop) as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        get_count as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        get_count,
+        get_drop,
+        get_never_sent,
+        percentile2(ReqType::Get as u64, 50.0) / 1000.0,
+        percentile2(ReqType::Get as u64, 90.0) / 1000.0,
+        percentile2(ReqType::Get as u64, 99.0) / 1000.0,
+        percentile2(ReqType::Get as u64, 99.9) / 1000.0,
+        percentile2(ReqType::Get as u64, 99.99) / 1000.0,
+    );
+    let _ = write_line_to_file(&get_line, &format!("{}/get.csv", resultpath));
+
+    let scan_count = *per_type_packet_count.get(&(ReqType::Scan as u64)).unwrap_or(&0);
+    let scan_drop = *per_type_drop_count.get(&(ReqType::Scan as u64)).unwrap_or(&0);
+    let scan_never_sent = *per_type_never_sent.get(&(ReqType::Scan as u64)).unwrap_or(&0);
+    let scan_line = format!(
+        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}",
+        sched.service.name(),
+        sched.rps,
+        (scan_count + scan_drop) as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        scan_count as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        scan_count,
+        scan_drop,
+        scan_never_sent,
+        percentile2(ReqType::Scan as u64, 50.0) / 1000.0,
+        percentile2(ReqType::Scan as u64, 90.0) / 1000.0,
+        percentile2(ReqType::Scan as u64, 99.0) / 1000.0,
+        percentile2(ReqType::Scan as u64, 99.9) / 1000.0,
+        percentile2(ReqType::Scan as u64, 99.99) / 1000.0,
+    );
+    let _ = write_line_to_file(&scan_line, &format!("{}/scan.csv", resultpath));
 
     if let OutputMode::Buckets = sched.output {
         print!("Latencies: ");
         for k in buckets.keys() {
             print!("{}:{} ", k, buckets[k]);
+        }
+        println!("");
+    }
+
+    // added by ZL
+    if let OutputMode::PerTypeBuckets = sched.output {
+        print!("PerTypeLatencies: ");
+        for (jtype, latencies) in &per_type_buckets {
+            print!("Jtype:{} ", jtype);
+            for k in latencies.keys() {
+                print!("{}:{} ", k, latencies[k]);
+            }
+        }
+        println!("");
+    }
+    if let OutputMode::PerTypeServerBuckets = sched.output {
+        print!("PerTypeLatencies: ");
+        for (jtype, latencies) in &per_type_server_buckets {
+            print!("Jtype:{} ", jtype);
+            for k in latencies.keys() {
+                print!("{}:{} ", k, latencies[k]);
+            }
         }
         println!("");
     }
@@ -597,7 +694,7 @@ fn process_result_final(
     true
 }
 
-fn process_result(sched: &RequestSchedule, packets: &mut [Packet]) -> Option<ScheduleResult> {
+fn process_result(sched: &RequestSchedule, packets: &mut [Packet], index: usize) -> Option<ScheduleResult> {
     if packets.len() == 0 {
         return None;
     }
@@ -609,19 +706,72 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet]) -> Option<Sch
     let mut never_sent = 0;
     let mut dropped = 0;
     let mut latencies = BTreeMap::new();
+    // added by ZL
+    let mut per_type_latencies = BTreeMap::new();
+    let mut per_type_server_latencies = BTreeMap::new();
+    let mut per_type_packet_count: BTreeMap<u64, usize> = BTreeMap::new();
+    let mut per_type_drop_count: BTreeMap<u64, usize> = BTreeMap::new();
+    let mut per_type_never_sent: BTreeMap<u64, usize> = BTreeMap::new();
+    per_type_packet_count.insert(ReqType::Get as u64, 0);
+    per_type_packet_count.insert(ReqType::Scan as u64, 0);
+    per_type_drop_count.insert(ReqType::Get as u64, 0);
+    per_type_drop_count.insert(ReqType::Scan as u64, 0);
+    per_type_never_sent.insert(ReqType::Get as u64, 0);
+    per_type_never_sent.insert(ReqType::Scan as u64, 0);
+    
     for p in packets.iter() {
         match (p.actual_start, p.completion_time) {
-            (None, _) => never_sent += 1,
-            (_, None) => dropped += 1,
+            (None, _) => {
+                // println!("never sent: {}",never_sent );
+                never_sent += 1;
+                *per_type_never_sent
+                    .entry(p.req_type)
+                    .or_insert(0) += 1;
+            }
+            (_, None) => {
+                // println!("dropped: {}", dropped);
+                dropped += 1;
+                *per_type_drop_count
+                    .entry(p.req_type)
+                    .or_insert(0) += 1;
+            }
             (Some(ref start), Some(ref end)) => {
+                // println!("sent");
                 *latencies
-                    .entry(duration_to_ns(*end - *start) / 1000)
+                    .entry(duration_to_ns(*end - *start)) // / 1000)
+                    .or_insert(0) += 1;
+                *per_type_packet_count
+                    .entry(p.req_type)
+                    .or_insert(0) += 1;
+            }
+        }
+        match (p.actual_start, p.completion_time, p.completion_server_tsc) {
+            (None, _, _) => {},
+            (_, None, _) => {},
+            (_, _, None) => {},
+            (Some(ref start), Some(ref end), Some(ref jtype)) => {
+                *per_type_latencies
+                    .entry(*jtype)
+                    .or_insert(BTreeMap::new())
+                    .entry(duration_to_ns(*end - *start)) //  / 1000) 
+                    .or_insert(0) += 1
+            }
+        }
+        match (p.completion_server_tsc, p.server_lat) {
+            (None, _) => {},
+            (_, None) => {},
+            (Some(ref jtype), Some(ref s_lat)) => {
+                *per_type_server_latencies
+                    .entry(*jtype)
+                    .or_insert(BTreeMap::new())
+                    .entry( *s_lat)
                     .or_insert(0) += 1
             }
         }
     }
 
     if packets.len() - dropped - never_sent <= 1 {
+        // println!("###1 {} {} {} {}", packets.len(), packets.len() - dropped - never_sent, dropped, never_sent);
         return None;
     }
 
@@ -634,6 +784,8 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet]) -> Option<Sch
 
     let first_tsc = packets.iter().filter_map(|p| p.completion_server_tsc).min();
 
+    // println!("###3 {} {} {} {}", packets.len(), packets.len() - dropped - never_sent, dropped, never_sent);
+    
     let trace = match sched.output {
         OutputMode::Trace => {
             let mut traceresults: Vec<_> = packets
@@ -657,6 +809,34 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet]) -> Option<Sch
         _ => None,
     };
 
+    // let mut file = match File::create(format!("/data/preempt/caladan-rocksdb/apps/synthetic/rocksdb_concord/result_50/uintr_opt123/5_8udp64_nosleep/{}",  index)) {
+    //     Ok(file) => file,
+    //     Err(e) => {
+    //         eprintln!("Error creating the file: {}", e);
+    //         return None;
+    //     }
+    // };
+
+    // if let Err(e) = file.set_len(0) {
+    //     eprintln!("Error truncating the file: {}", e);
+    //     return None;
+    // }
+
+    // for p in packets.iter() {
+    //     match (p.actual_start, p.completion_time) {
+    //         (Some(ref start), None) => {
+    //             writeln!(file, "s={} dropped", start.as_micros());
+    //         }
+    //         (Some(ref start), Some(ref end)) => {
+    //             let duration = *end - *start;
+    //             writeln!(file, "s={} e={} d={}", start.as_micros(), end.as_micros(), duration.as_micros());
+    //         }
+    //         (None, _) => {
+    //             writeln!(file, "Never sent");
+    //         }
+    //     }
+    // }
+
     Some(ScheduleResult {
         packet_count: packets.len() - dropped - never_sent,
         drop_count: dropped,
@@ -666,34 +846,41 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet]) -> Option<Sch
         latencies: latencies,
         first_tsc: first_tsc,
         trace: trace,
+        // added by ZL
+        per_type_latencies: per_type_latencies,
+        per_type_server_latencies: per_type_server_latencies,
+        per_type_packet_count: per_type_packet_count,
+        per_type_drop_count: per_type_drop_count,
+        per_type_never_sent: per_type_never_sent,
     })
 }
 
-fn gen_packets_for_schedule(schedules: &Arc<Vec<RequestSchedule>>) -> (Vec<Packet>, Vec<usize>) {
-    let mut packets: Vec<Packet> = Vec::new();
-    let mut rng: MersenneTwister = SeedableRng::from_seed(rand::thread_rng().gen::<u64>());
-    let mut sched_boundaries = Vec::new();
-    let mut last = 100_000_000;
-    let mut end = 100_000_000;
-    for sched in schedules.iter() {
-        end += duration_to_ns(sched.runtime);
-        loop {
-            packets.push(Packet {
-                randomness: rng.gen::<u64>(),
-                target_start: Duration::from_nanos(last),
-                work_iterations: sched.service.sample(&mut rng),
-                ..Default::default()
-            });
-
-            let nxt = last + sched.arrival.sample(&mut rng);
-            if nxt >= end {
-                break;
-            }
-            last = nxt;
+fn print_result(end: usize, packets: &[Packet]) -> Result<File, io::Error> {
+  
+    let mut file = match File::create(format!("packets/{}.txt", end)) {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            return Err(e);
         }
-        sched_boundaries.push(packets.len());
-    }
-    (packets, sched_boundaries)
+    };
+
+    packets.iter().for_each(|p| {
+        let start: Duration = match p.actual_start {
+            Some(d) => d,
+            None => Duration::default(),
+        };
+
+        let end: Duration = match p.completion_time {
+            Some(d) => d,
+            None => Duration::default(),
+        };
+
+        // writeln!(file, "{:?} {:?} {}", start, end, duration_to_ns(end - start)).expect("Failed to write to file");
+        writeln!(file, "{:?} {:?}", start, end).expect("Failed to write to file");
+    });
+
+    Ok(file)
 }
 
 fn run_client_worker(
@@ -705,19 +892,39 @@ fn run_client_worker(
     wg_start: shenango::WaitGroup,
     schedules: Arc<Vec<RequestSchedule>>,
     index: usize,
-    live_mode_socket: Option<Arc<Connection>>,
 ) -> Vec<Option<ScheduleResult>> {
+    let mut packets: Vec<Packet> = Vec::new();
+    let mut rng: MersenneTwister = SeedableRng::from_seed(rand::thread_rng().gen::<u64>());
     let mut payload = Vec::with_capacity(4096);
-    let (mut packets, sched_boundaries) = gen_packets_for_schedule(&schedules);
+
+    let mut sched_boundaries = Vec::new();
+
+    let mut last = 100_000_000;
+    let mut end = 100_000_000;
+    for sched in schedules.iter() {
+        end += duration_to_ns(sched.runtime);
+        loop {
+            let nxt = last + sched.arrival.sample(&mut rng);
+            if nxt >= end {
+                break;
+            }
+            last = nxt;
+            packets.push(Packet {
+                randomness: rng.gen::<u64>(),
+                target_start: Duration::from_nanos(last),
+                work_iterations: sched.service.sample(&mut rng),
+                ..Default::default()
+            });
+        }
+        // println!("{}: {}", index, packets.len());
+        sched_boundaries.push(packets.len());
+    }
+
     let src_addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), (100 + index) as u16);
-    let live_mode = live_mode_socket.is_some();
-    let socket = match live_mode_socket {
-        Some(sock) => sock,
-        _ => Arc::new(match tport {
-            Transport::Tcp => backend.create_tcp_connection(Some(src_addr), addr).unwrap(),
-            Transport::Udp => backend.create_udp_connection(src_addr, Some(addr)).unwrap(),
-        }),
-    };
+    let socket = Arc::new(match tport {
+        Transport::Tcp => backend.create_tcp_connection(Some(src_addr), addr).unwrap(),
+        Transport::Udp => backend.create_udp_connection(src_addr, Some(addr)).unwrap(),
+    });
 
     let packets_per_thread = packets.len();
     let socket2 = socket.clone();
@@ -726,17 +933,25 @@ fn run_client_worker(
     let receive_thread = backend.spawn_thread(move || {
         let mut recv_buf = vec![0; 4096];
         let mut receive_times = vec![None; packets_per_thread];
-        let mut buf = Buffer::new(&mut recv_buf);
-        let use_ordering = rproto.uses_ordered_requests();
         wg2.done();
-        for i in 0..receive_times.len() {
-            match rproto.read_response(&socket2, &mut buf) {
-                Ok((mut idx, tsc)) => {
-                    if use_ordering {
-                        idx = i;
+        for _ in 0..receive_times.len() {
+            /* 
+            match rproto.read_response(&socket2, &mut recv_buf[..]) {
+                Ok((idx, tsc)) => receive_times[idx] = Some((Instant::now(), tsc, 0)),
+                Err(e) => {
+                    match e.raw_os_error() {
+                        Some(-103) | Some(-104) => break,
+                        _ => (),
                     }
-                    receive_times[idx] = Some((Instant::now(), tsc));
+                    if e.kind() != ErrorKind::UnexpectedEof {
+                        println!("Receive thread: {}", e);
+                    }
+                    break;
                 }
+            }*/
+            // added by ZL
+            match rproto.read_response_w_server_lat(&socket2, &mut recv_buf[..]) {
+                Ok((idx, tsc, run_us)) => receive_times[idx] = Some((Instant::now(), tsc, run_us)),
                 Err(e) => {
                     match e.raw_os_error() {
                         Some(-103) | Some(-104) => break,
@@ -758,13 +973,9 @@ fn run_client_worker(
     let socket2 = socket.clone();
     let wg2 = wg.clone();
     let wg3 = wg_start.clone();
-    let live_mode2 = live_mode;
     let timer = backend.spawn_thread(move || {
         wg2.done();
         wg3.wait();
-        if live_mode2 {
-            return;
-        }
         backend.sleep(last + Duration::from_millis(500));
         if Arc::strong_count(&socket2) > 1 {
             socket2.shutdown();
@@ -774,17 +985,19 @@ fn run_client_worker(
     wg.done();
     wg_start.wait();
     let start = Instant::now();
-
+    // println!("##### send");
     for (i, packet) in packets.iter_mut().enumerate() {
         payload.clear();
-        proto.gen_req(i, packet, &mut payload);
+        packet.req_type = proto.gen_req(i, packet, &mut payload);
+        
+        // println!("Length: {}, {:?}", payload.len(), payload);
 
         let mut t = start.elapsed();
         while t + Duration::from_micros(1) < packet.target_start {
-            backend.sleep(packet.target_start - t);
+            // backend.sleep(packet.target_start - t);
             t = start.elapsed();
         }
-        if !live_mode && t > packet.target_start + Duration::from_micros(5) {
+        if t > packet.target_start + Duration::from_micros(5) {
             continue;
         }
 
@@ -798,7 +1011,7 @@ fn run_client_worker(
             break;
         }
     }
-
+    
     wg.done();
     wg_start.wait();
 
@@ -807,15 +1020,18 @@ fn run_client_worker(
         .join()
         .unwrap()
         .into_iter()
-        .zip(
-            packets
-                .iter_mut()
-                .filter(|p| !proto.uses_ordered_requests() || p.actual_start.is_some()),
-        )
-        .for_each(|(c, p)| {
+        .zip(packets.iter_mut())
+        /*.for_each(|(c, p)| {
             if let Some((inst, tsc)) = c {
                 (*p).completion_time = Some(inst - start);
                 (*p).completion_server_tsc = Some(tsc);
+            }
+        }*/
+        .for_each(|(c, p)| {
+            if let Some((inst, tsc, run_us)) = c {
+                (*p).completion_time = Some(inst - start);
+                (*p).completion_server_tsc = Some(tsc);
+                (*p).server_lat = Some(run_us);
             }
         });
 
@@ -824,117 +1040,27 @@ fn run_client_worker(
         .iter()
         .zip(sched_boundaries)
         .map(|(sched, end)| {
-            let res = process_result(&sched, &mut packets[start_index..end]);
+            // let _ = print_result(end, &packets[start_index..end]);
+            // println!("{}: {} - {} {}", index, start_index, end, end - start_index);
+            let res = process_result(&sched, &mut packets[start_index..end], index);
+            // println!("{}: {} -- {}, {} {} {}", index, start_index, end, res.packet_count, res.drop_count, res.never_sent_count);
             start_index = end;
             res
         })
         .collect::<Vec<Option<ScheduleResult>>>()
 }
 
-fn run_live_client(
-    proto: Arc<Box<dyn LoadgenProtocol>>,
-    backend: Backend,
-    addrs: &Vec<SocketAddrV4>,
-    nthreads: usize,
-    tport: Transport,
-    barrier_group: &mut Option<lockstep::Group>,
-    schedules: Vec<RequestSchedule>,
-) {
-    let schedules = Arc::new(schedules);
-
-    let sockets: Vec<_> = (0..nthreads)
-        .into_iter()
-        .map(|i| {
-            let addr = addrs[i % addrs.len()];
-            let client_idx = 200 + i;
-            let src_addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), client_idx as u16);
-            Arc::new(match tport {
-                Transport::Tcp => backend.create_tcp_connection(Some(src_addr), addr).unwrap(),
-                Transport::Udp => backend.create_udp_connection(src_addr, Some(addr)).unwrap(),
-            })
-        })
-        .collect();
-
-    let wg = shenango::WaitGroup::new();
-    let wg_start = shenango::WaitGroup::new();
-
-    loop {
-        wg.add(3 * nthreads as i32);
-        wg_start.add(1 as i32);
-        let socks = sockets.clone();
-
-        let conn_threads: Vec<_> = (0..nthreads)
-            .into_iter()
-            .zip(socks)
-            .map(|(i, sock)| {
-                let client_idx = 100 + i;
-                let proto = proto.clone();
-                let wg = wg.clone();
-                let wg_start = wg_start.clone();
-                let schedules = schedules.clone();
-                let addr = addrs[i % addrs.len()];
-
-                backend.spawn_thread(move || {
-                    run_client_worker(
-                        proto,
-                        backend,
-                        addr,
-                        tport,
-                        wg,
-                        wg_start,
-                        schedules,
-                        client_idx,
-                        Some(sock.clone()),
-                    )
-                })
-            })
-            .collect();
-
-        wg.wait();
-
-        if let Some(ref mut g) = *barrier_group {
-            g.barrier();
-        }
-
-        wg_start.done();
-        let start_unix = SystemTime::now();
-
-        wg.add(nthreads as i32);
-        wg_start.add(1 as i32);
-
-        wg.wait();
-        wg_start.done();
-
-        let mut packets: Vec<Vec<Option<ScheduleResult>>> = conn_threads
-            .into_iter()
-            .map(|s| s.join().unwrap())
-            .collect();
-
-        let mut sched_start = Duration::from_nanos(100_000_000);
-        schedules
-            .iter()
-            .enumerate()
-            .map(|(i, sched)| {
-                let perthread = packets.iter_mut().filter_map(|p| p[i].take()).collect();
-                let r = process_result_final(sched, perthread, start_unix, sched_start);
-                sched_start += sched.runtime;
-                r
-            })
-            .collect::<Vec<bool>>()
-            .into_iter()
-            .all(|p| p);
-    }
-}
-
 fn run_client(
+    workload: &str,
     proto: Arc<Box<dyn LoadgenProtocol>>,
     backend: Backend,
-    addrs: &Vec<SocketAddrV4>,
+    addr: Ipv4Addr,
     nthreads: usize,
     tport: Transport,
     barrier_group: &mut Option<lockstep::Group>,
     schedules: Vec<RequestSchedule>,
     index: usize,
+    resultpath: &String,
 ) -> bool {
     let schedules = Arc::new(schedules);
     let wg = shenango::WaitGroup::new();
@@ -946,21 +1072,34 @@ fn run_client(
         .into_iter()
         .map(|i| {
             let client_idx = 100 + (index * nthreads) + i;
+            // println!("{} {}", index, client_idx);
             let proto = proto.clone();
             let wg = wg.clone();
             let wg_start = wg_start.clone();
             let schedules = schedules.clone();
-            let addr = addrs[i % addrs.len()];
+            // let sockaddr = SocketAddrV4::new(addr, 5000 + i as u16);
+            
+            let mut port: u16 = 5000;
+            if workload == "rocksdb" {
+                port = 5000 + i as u16;
+            }
+            if workload == "leveldb" {
+                port = 5000 + i as u16;
+            }
+            // if workload == "buf" {
+            //     port = 5000 + i as u16;
+            // }
+            let sockaddr = SocketAddrV4::new(addr, port);
 
             backend.spawn_thread(move || {
                 run_client_worker(
-                    proto, backend, addr, tport, wg, wg_start, schedules, client_idx, None,
+                    proto, backend, sockaddr, tport, wg, wg_start, schedules, client_idx,
                 )
             })
         })
         .collect();
 
-    backend.sleep(Duration::from_secs(1));
+    backend.sleep(Duration::from_secs(10));
     wg.wait();
 
     if let Some(ref mut g) = *barrier_group {
@@ -987,7 +1126,7 @@ fn run_client(
         .enumerate()
         .map(|(i, sched)| {
             let perthread = packets.iter_mut().filter_map(|p| p[i].take()).collect();
-            let r = process_result_final(sched, perthread, start_unix, sched_start);
+            let r = process_result_final(sched, perthread, start_unix, sched_start, resultpath);
             sched_start += sched.runtime;
             r
         })
@@ -1001,11 +1140,29 @@ fn run_local(
     nthreads: usize,
     worker: Arc<FakeWorker>,
     schedules: Vec<RequestSchedule>,
+    resultpath: &String,
 ) -> bool {
+    let mut rng = rand::thread_rng();
     let schedules = Arc::new(schedules);
 
     let packet_schedules: Vec<Vec<Packet>> = (0..nthreads)
-        .map(|_| gen_packets_for_schedule(&schedules).0)
+        .map(|_| {
+            let mut last = 100_000_000;
+            let mut thread_packets: Vec<Packet> = Vec::new();
+            for sched in schedules.iter() {
+                let end = last + duration_to_ns(sched.runtime);
+                while last < end {
+                    last += sched.arrival.sample(&mut rng);
+                    thread_packets.push(Packet {
+                        randomness: rng.gen::<u64>(),
+                        target_start: Duration::from_nanos(last),
+                        work_iterations: sched.service.sample(&mut rng),
+                        ..Default::default()
+                    });
+                }
+            }
+            thread_packets
+        })
         .collect();
 
     let start_unix = SystemTime::now();
@@ -1071,7 +1228,7 @@ fn run_local(
                         .unwrap_or(packets.len() - start_index - 1)
                         + 1;
                     let res =
-                        process_result(&sched, &mut packets[start_index..start_index + npackets]);
+                        process_result(&sched, &mut packets[start_index..start_index + npackets], 0);
                     start = packets[start_index + npackets - 1].target_start;
                     start_index += npackets;
                     res
@@ -1091,7 +1248,7 @@ fn run_local(
         .enumerate()
         .map(|(i, sched)| {
             let perthread = packets.iter_mut().filter_map(|p| p[i].take()).collect();
-            let r = process_result_final(sched, perthread, start_unix, sched_start);
+            let r = process_result_final(sched, perthread, start_unix, sched_start, resultpath);
             sched_start += sched.runtime;
             r
         })
@@ -1106,7 +1263,6 @@ fn main() {
         .arg(
             Arg::with_name("ADDR")
                 .index(1)
-                .multiple(true)
                 .help("Address and port to listen on")
                 .required(true),
         )
@@ -1115,7 +1271,7 @@ fn main() {
                 .short("t")
                 .long("threads")
                 .value_name("T")
-                .default_value("1")
+                .default_value("4")
                 .help("Number of client threads"),
         )
         .arg(
@@ -1152,14 +1308,14 @@ fn main() {
             Arg::with_name("mpps")
                 .long("mpps")
                 .takes_value(true)
-                .default_value("0.02")
+                .default_value("0.2")
                 .help("How many *million* packets should be sent per second"),
         )
         .arg(
             Arg::with_name("start_mpps")
                 .long("start_mpps")
                 .takes_value(true)
-                .default_value("0.0")
+                .default_value("0")
                 .help("Initial rate to sample at"),
         )
         .arg(
@@ -1173,7 +1329,7 @@ fn main() {
                 .short("p")
                 .long("protocol")
                 .value_name("PROTOCOL")
-                .possible_values(&["synthetic", "memcached", "dns", "reflex", "http"])
+                .possible_values(&["synthetic", "memcached", "dns", "reflex", "rocksdb", "leveldb", "buf"])
                 .default_value("synthetic")
                 .help("Server protocol"),
         )
@@ -1194,7 +1350,7 @@ fn main() {
                 .short("o")
                 .long("output")
                 .value_name("output mode")
-                .possible_values(&["silent", "normal", "buckets", "trace"])
+                .possible_values(&["silent", "normal", "buckets", "pertypebuckets", "pertypeserverbuckets", "trace"])
                 .default_value("normal")
                 .help("How to display loadgen results"),
         )
@@ -1271,30 +1427,24 @@ fn main() {
                 .help("loadshift spec"),
         )
         .arg(
-            Arg::with_name("live")
-                .long("live")
-                .takes_value(false)
-                .help("run live mode"),
-        )
-        .arg(
-            Arg::with_name("intersample_sleep")
-                .long("intersample_sleep")
+            Arg::with_name("resultpath")
+                .long("resultpath")
                 .takes_value(true)
-                .default_value("0")
-                .help("seconds to sleep between samples"),
+                .default_value("result/tmp")
+                .help("Result path"),
         )
         .args(&SyntheticProtocol::args())
         .args(&MemcachedProtocol::args())
         .args(&DnsProtocol::args())
         .args(&ReflexProtocol::args())
-        .args(&HttpProtocol::args())
+	    .args(&RocksDBProtocol::args())
+        .args(&LevelDBProtocol::args())
+        .args(&BufProtocol::args())
         .get_matches();
 
-    let addrs: Vec<SocketAddrV4> = matches
-        .values_of("ADDR")
-        .unwrap()
-        .map(|val| FromStr::from_str(val).unwrap())
-        .collect();
+    // let addr: SocketAddrV4 = FromStr::from_str(matches.value_of("ADDR").unwrap()).unwrap();
+    let addr: Ipv4Addr = FromStr::from_str(matches.value_of("ADDR").unwrap()).unwrap();
+    let sockaddr = SocketAddrV4::new(addr, 5000);
     let nthreads = value_t_or_exit!(matches, "threads", usize);
     let discard_pct = value_t_or_exit!(matches, "discard_pct", f32);
 
@@ -1304,7 +1454,6 @@ fn main() {
     assert!(start_packets_per_second <= packets_per_second);
     let config = matches.value_of("config");
     let dowarmup = matches.is_present("warmup");
-    let live_mode = matches.is_present("live");
 
     let tport = value_t_or_exit!(matches, "transport", Transport);
     let proto: Arc<Box<dyn LoadgenProtocol>> = match matches.value_of("protocol").unwrap() {
@@ -1312,11 +1461,13 @@ fn main() {
         "memcached" => Arc::new(Box::new(MemcachedProtocol::with_args(&matches, tport))),
         "dns" => Arc::new(Box::new(DnsProtocol::with_args(&matches, tport))),
         "reflex" => Arc::new(Box::new(ReflexProtocol::with_args(&matches, tport))),
-        "http" => Arc::new(Box::new(HttpProtocol::with_args(&matches, tport))),
+	    "rocksdb" => Arc::new(Box::new(RocksDBProtocol::with_args(&matches, tport))),
+        "leveldb" => Arc::new(Box::new(LevelDBProtocol::with_args(&matches, tport))),
+        "buf" => Arc::new(Box::new(BufProtocol::with_args(&matches, tport))),
         _ => unreachable!(),
     };
+    let workload = value_t_or_exit!(matches, "protocol", String);
 
-    let intersample_sleep = value_t_or_exit!(matches, "intersample_sleep", u64);
     let output = value_t_or_exit!(matches, "output", OutputMode);
     let mean = value_t_or_exit!(matches, "mean", f64);
     let distribution = match matches.value_of("distribution").unwrap() {
@@ -1341,6 +1492,8 @@ fn main() {
     let fwspec = value_t_or_exit!(matches, "fakework", String);
     let fakeworker = Arc::new(FakeWorker::create(&fwspec).unwrap());
 
+    let resultpath = value_t_or_exit!(matches, "resultpath", String);
+    
     if matches.is_present("calibrate") {
         let us = value_t_or_exit!(matches, "calibrate", u64);
         backend.init_and_run(config, move || {
@@ -1366,23 +1519,23 @@ fn main() {
     match mode {
         "spawner-server" => match tport {
             Transport::Udp => {
-                backend.init_and_run(config, move || run_spawner_server(addrs[0], &fwspec))
+                backend.init_and_run(config, move || run_spawner_server(sockaddr, &fwspec))
             }
-            Transport::Tcp => backend.init_and_run(config, move || {
-                run_tcp_server(backend, addrs[0], fakeworker)
-            }),
+            Transport::Tcp => {
+                backend.init_and_run(config, move || run_tcp_server(backend, sockaddr, fakeworker))
+            }
         },
         "linux-server" => match tport {
             Transport::Udp => backend.init_and_run(config, move || {
-                run_linux_udp_server(backend, addrs[0], nthreads, fakeworker)
+                run_linux_udp_server(backend, sockaddr, nthreads, fakeworker)
             }),
-            Transport::Tcp => backend.init_and_run(config, move || {
-                run_tcp_server(backend, addrs[0], fakeworker)
-            }),
+            Transport::Tcp => {
+                backend.init_and_run(config, move || run_tcp_server(backend, sockaddr, fakeworker))
+            }
         },
         "local-client" => {
             backend.init_and_run(config, move || {
-                println!("Distribution, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start, StartTsc");
+                println!("Distribution, RPS, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
                 if dowarmup {
                     for packets_per_second in (1..3).map(|i| i * 100000) {
                         let sched = gen_classic_packet_schedule(
@@ -1399,6 +1552,7 @@ fn main() {
                             nthreads,
                             fakeworker.clone(),
                             sched,
+                            &resultpath,
                         );
                     }
                 }
@@ -1418,12 +1572,14 @@ fn main() {
                         nthreads,
                         fakeworker.clone(),
                         sched,
+                        &resultpath,
                     );
                     backend.sleep(Duration::from_secs(3));
                 }
             });
         }
         "linux-client" | "runtime-client" => {
+            
             let matches = matches.clone();
             backend.init_and_run(config, move || {
 
@@ -1436,49 +1592,43 @@ fn main() {
                     .unwrap()
                 });
 
-                if !live_mode {
-                    println!("Distribution, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start, StartTsc");
-                }
+                // println!("Distribution, RPS, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
+                let total_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start";
+                let _ = init_file(&format!("{}/total.csv", resultpath));
+                let _ = write_line_to_file(total_line,  &format!("{}/total.csv", resultpath));
+                
+                let get_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th";
+                let _ = init_file(&format!("{}/get.csv", resultpath));
+                let _ = write_line_to_file(get_line,  &format!("{}/get.csv", resultpath));
+
+                let scan_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th";
+                let _ = init_file(&format!("{}/scan.csv", resultpath));
+                let _ = write_line_to_file(scan_line,  &format!("{}/scan.csv", resultpath));
+                
                 match (matches.value_of("protocol").unwrap(), &barrier_group) {
                     (_, Some(lockstep::Group::Client(ref _c))) => (),
                     ("memcached", _) => {
                         let proto = MemcachedProtocol::with_args(&matches, Transport::Tcp);
-                        for addr in &addrs {
-                            if !run_memcached_preload(proto, backend, Transport::Tcp, *addr, nthreads) {
-                                panic!("Could not preload memcached");
-                            }
+                        if !run_memcached_preload(proto, backend, Transport::Tcp, sockaddr, nthreads) {
+                            panic!("Could not preload memcached");
                         }
-
                     },
                     _ => (),
                 };
 
-
-                if live_mode {
-                    let sched = gen_classic_packet_schedule(
-                        runtime,
-                        packets_per_second,
-                        OutputMode::Live,
-                        distribution,
-                        rampup,
-                        nthreads,
-                        discard_pct
-                    );
-                    run_live_client(proto, backend, &addrs, nthreads, tport, &mut barrier_group, sched);
-                    unreachable!();
-                }
-
                 if !loadshift_spec.is_empty() {
                     let sched = gen_loadshift_experiment(&loadshift_spec, distribution, nthreads, output);
                     run_client(
+                        &workload,
                         proto,
                         backend,
-                        &addrs,
+                        addr,
                         nthreads,
                         tport,
                         &mut barrier_group,
                         sched,
                         0,
+                        &resultpath,
                     );
                     if let Some(ref mut g) = barrier_group {
                         g.barrier();
@@ -1490,8 +1640,8 @@ fn main() {
                     // Run at full pps 3 times for 20 seconds
                     for _ in 0..1 {
                     let sched = gen_classic_packet_schedule(
-                        Duration::from_secs(1),
-                        (0.75 * (packets_per_second as f64)) as usize,
+                        Duration::from_secs(2),
+                        packets_per_second,
                         OutputMode::Silent,
                         distribution,
                         20,
@@ -1499,21 +1649,46 @@ fn main() {
                         discard_pct,
                     );
                         run_client(
+                            &workload,
                             proto.clone(),
                             backend,
-                            &addrs,
+                            addr,
                             nthreads,
                             tport,
                             &mut barrier_group,
                             sched,
                             0,
+                            &resultpath,
                         );
                     }
-                    backend.sleep(Duration::from_secs(intersample_sleep));
                 }
-
+                
+                // let sched = gen_classic_packet_schedule(
+                //     Duration::from_secs(30),
+                //     packets_per_second/10*7,
+                //     // 180000,
+                //     output,
+                //     distribution,
+                //     rampup,
+                //     nthreads,
+                //     discard_pct,
+                // );
+                // run_client(
+                //     &workload,
+                //     proto.clone(),
+                //     backend,
+                //     addr,
+                //     nthreads,
+                //     tport,
+                //     &mut barrier_group,
+                //     sched,
+                //     0,
+                //     &resultpath,
+                // );
+                // backend.sleep(Duration::from_secs(10));
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
+                    backend.sleep(Duration::from_secs(3));
                     let sched = gen_classic_packet_schedule(
                         runtime,
                         start_packets_per_second + step_size * j,
@@ -1521,19 +1696,20 @@ fn main() {
                         distribution,
                         rampup,
                         nthreads,
-                        discard_pct
+                        discard_pct,
                     );
                     if !run_client(
+                        &workload,
                         proto.clone(),
                         backend,
-                        &addrs,
+                        addr,
                         nthreads,
                         tport,
                         &mut barrier_group,
                         sched,
                         j,
+                        &resultpath,
                     ) { break; }
-                    if j != samples { backend.sleep(Duration::from_secs(intersample_sleep)); }
                 }
                 if let Some(ref mut g) = barrier_group {
                     g.barrier();
