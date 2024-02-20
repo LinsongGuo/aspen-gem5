@@ -313,9 +313,8 @@ int uintr_init(void) {
     memset(uintr_sent, 0, sizeof(uintr_sent));
     memset(uintr_recv, 0, sizeof(uintr_recv));
 
-    TIMESLICE = atoi(getenv("TIMESLICE")) * 1000L;
-    // TIMESLICE = 5 * 1000L;
-	log_info("TIMESLICE: %lld us", TIMESLICE / 1000);
+    TIMESLICE = uthread_quantum_us * 1000;
+	log_info("quantum: %lld us", TIMESLICE / 1000);
     return 0;
 }
 
