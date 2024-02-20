@@ -382,11 +382,7 @@ void MainHandler_udpconn(void *arg) {
       return;
     }
     
-<<<<<<< HEAD
-    for (int i = 0; i < 32; ++i) {
-=======
     for (unsigned i = 0; i < num_conn; ++i) {
->>>>>>> formal_apps
       rt::Spawn([&, c]() {
         HandleLoop(c);
       });

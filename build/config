@@ -19,6 +19,6 @@ CONFIG_UNSAFE_PREEMPT=simdreg
 # preemption mechanism: signal or uintr
 CONFIG_PREEMPT=uintr
 # Enable smart preemption policy
-CONFIG_SMART_PREEMPT=n
+CONFIG_SMART_PREEMPT=y
 # Enable simulated NIC
 CONFIG_SIMULATED_NIC=y
