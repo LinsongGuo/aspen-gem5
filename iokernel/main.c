@@ -14,6 +14,8 @@
 #include "defs.h"
 #include "sched.h"
 
+#include <m5_mmap.h>
+
 #define LOG_INTERVAL_US		(1000 * 1000)
 struct iokernel_cfg cfg;
 struct dataplane dp;
@@ -165,6 +167,11 @@ static void print_usage(void)
 
 int main(int argc, char *argv[])
 {
+	printf("------------ iokernel\n");
+	m5op_addr = 0xFFFF0000;
+    map_m5_mem();
+	m5_switch_cpu_addr();
+
 	int i, ret;
 
 	if (getuid() != 0) {
