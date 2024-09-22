@@ -97,15 +97,19 @@ __mem_map_anom(void *base, size_t len, size_t pgsize,
 	if (addr == MAP_FAILED)
 		return MAP_FAILED;
 
-	BUILD_ASSERT(sizeof(unsigned long) * 8 >= NNUMA);
-	if (mbind(addr, len, numa_policy, mask ? mask : NULL,
-		  mask ? NNUMA + 1 : 0, MPOL_MF_STRICT | MPOL_MF_MOVE))
-		goto fail;
+	// BUILD_ASSERT(sizeof(unsigned long) * 8 >= NNUMA);
+	// if (mbind(addr, len, numa_policy, mask ? mask : NULL,
+	// 	  mask ? NNUMA + 1 : 0, MPOL_MF_STRICT | MPOL_MF_MOVE)) {
+	// 	log_info("mbind failed");
+	// 	goto fail;
+	// }
 
 	touch_mapping(addr, len, pgsize);
 	return addr;
 
 fail:
+		log_info(" failed");
+
 	munmap(addr, len);
 	return MAP_FAILED;
 }

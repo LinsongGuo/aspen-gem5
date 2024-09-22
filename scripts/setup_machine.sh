@@ -16,9 +16,11 @@ mknod /dev/ksched c 280 0
 chmod uga+rwx /dev/ksched
 
 # reserve huge pages
-for n in /sys/devices/system/node/node*; do
-echo 5192 > ${n}/hugepages/hugepages-2048kB/nr_hugepages
-done
+# for n in /sys/devices/system/node/node*; do
+# echo 5192 > ${n}/hugepages/hugepages-2048kB/nr_hugepages
+# done
+# mount -t hugetlbfs pagesize=2MB /mnt/huge
+# echo 5192 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
 
 # load msr module
 modprobe msr

@@ -1,7 +1,7 @@
 # build configuration options (set to y for "yes", n for "no")
 
 # Enable Mellanox ConnectX-4,5 NIC Support
-CONFIG_MLX5=y
+CONFIG_MLX5=n
 # Enable Mellanox ConnectX-3 NIC Support
 CONFIG_MLX4=n
 # Enable SPDK NVMe support
@@ -15,10 +15,12 @@ CONFIG_DIRECTPATH=n
 # Build with clang instead of gcc
 CONFIG_CLANG=n
 # unsafe preemption option 
-CONFIG_UNSAFE_PREEMPT=simdreg
+CONFIG_UNSAFE_PREEMPT=simdreg_sse
 # preemption mechanism: signal or uintr
 CONFIG_PREEMPT=uintr
 # Enable smart preemption policy
-CONFIG_SMART_PREEMPT=y
+CONFIG_SMART_PREEMPT=n
 # Enable simulated NIC
 CONFIG_SIMULATED_NIC=y
+# Enable m5 utimer
+CONFIG_M5_UTIMER=n

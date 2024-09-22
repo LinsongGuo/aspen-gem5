@@ -60,6 +60,8 @@ else
 endif
 runtime_obj = $(runtime_src:.c=.o) $(runtime_asm:.S=.o)
 
+$(runtime_obj): INC += -I$(ROOT_PATH)/m5/src
+
 # test cases
 test_src = $(wildcard tests/*.c)
 test_obj = $(test_src:.c=.o)
@@ -76,6 +78,7 @@ DPDK_LIBS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static 
 ifeq ($(CONFIG_MLX5),y)
 $(iokernel_obj): INC += $(MLX5_INC)
 endif
+$(iokernel_obj): INC += -I$(ROOT_PATH)/m5/src
 
 # must be first
 all: libbase.a libnet.a libruntime.a iokerneld $(test_targets)
@@ -91,7 +94,7 @@ libruntime.a: $(runtime_obj)
 
 iokerneld: $(iokernel_obj) libbase.a libnet.a base/base.ld $(PCM_DEPS)
 	$(LD) $(LDFLAGS) -o $@ $(iokernel_obj) libbase.a libnet.a $(DPDK_LIBS) \
-	$(PCM_DEPS) $(PCM_LIBS) -lpthread -lnuma -ldl
+	$(PCM_DEPS) $(PCM_LIBS) $(ROOT_PATH)/m5/libm5.a -lpthread -lnuma -ldl
 
 $(test_targets): $(test_obj) libbase.a libruntime.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $@.o $(RUNTIME_LIBS)

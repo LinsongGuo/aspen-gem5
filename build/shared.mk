@@ -28,9 +28,9 @@ endif
 
 # libraries to include
 RUNTIME_DEPS = $(ROOT_PATH)/libruntime.a $(ROOT_PATH)/libnet.a \
-	       $(ROOT_PATH)/libbase.a
+	       $(ROOT_PATH)/libbase.a $(ROOT_PATH)/m5/libm5.a
 RUNTIME_LIBS = $(ROOT_PATH)/libruntime.a $(ROOT_PATH)/libnet.a \
-	       $(ROOT_PATH)/libbase.a -lpthread
+	       $(ROOT_PATH)/libbase.a $(ROOT_PATH)/m5/libm5.a -lpthread
 
 # PKG_CONFIG_PATH
 PKG_CONFIG_PATH := $(ROOT_PATH)/rdma-core/build/lib/pkgconfig:$(PKG_CONFIG_PATH)
@@ -48,9 +48,10 @@ MLX5_LIBS += -l:libmlx5.a -l:libibverbs.a -lnl-3 -lnl-route-3 -lrdmacm -lrdma_ut
 # parse configuration options
 ifeq ($(CONFIG_DEBUG),y)
 FLAGS += -DDEBUG -rdynamic -O0 -ggdb -mssse3 -muintr
+# -mno-avx -mno-avx512f
 LDFLAGS += -rdynamic
 else
-FLAGS += -DNDEBUG -O3 -mavx512f
+FLAGS += -DNDEBUG -O3 -mssse3
 # FLAGS += -DNDEBUG -O3 -mavx2
 ifeq ($(CONFIG_OPTIMIZE),y)
 FLAGS += -march=native -flto -ffast-math
@@ -125,6 +126,10 @@ endif
 
 ifeq ($(CONFIG_SIMULATED_NIC), y)
 FLAGS += -DSIMULATED_NIC
+endif
+
+ifeq ($(CONFIG_M5_UTIMER), y)
+FLAGS += -DM5_UTIMER
 endif
 
 WRAP_FLAGS = -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc -Wl,-wrap=aligned_alloc -Wl,-wrap=posix_memalign

@@ -34,6 +34,8 @@ unsigned int guaranteedks = 0;
 long long uthread_quantum_us = 0;
 /* the number of active kthreads */
 atomic_t runningks;
+/* If the runtime is a load generator */
+bool is_load_generator = false;
 /* an array of attached kthreads (@nrks in total) */
 struct kthread *ks[NCPU];
 /* kernel thread-local data */
@@ -290,9 +292,12 @@ void kthread_wait_to_attach(void)
 	struct kthread *k = myk();
 	int s;
 
-	do {
-		s = ioctl(ksched_fd, KSCHED_IOC_START, 0);
-	} while (s < 0);
+	// log_info("ioctl KSCHED_IOC_START starts");
+	// do {
+	// 	s = ioctl(ksched_fd, KSCHED_IOC_START, 0);
+	// } while (s < 0);
+	s = 0;
+	// log_info("ioctl KSCHED_IOC_START ends");
 
 	k->curr_cpu = s;
 	store_release(&cpu_map[s].recent_kthread, k);

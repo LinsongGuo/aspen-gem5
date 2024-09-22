@@ -4,11 +4,13 @@ extern "C" {
 #include <runtime/runtime.h>
 #include <runtime/udp.h>
 #include <runtime/uintr.h>
+#include <runtime/preempt.h>
 }
 
 #include <c.h>
 #include <algorithm>
 #include <iostream>
+#include <sstream>
 #include "sync.h"
 #include "uintr.h"
 #include "thread.h"
@@ -18,12 +20,40 @@ extern "C" {
 #include <stdlib.h>
 #include <time.h>
 #include <algorithm>
+#include <vector>
 
 long long now() {
 	struct timespec ts;
 	timespec_get(&ts, TIME_UTC);
 	return ts.tv_sec * 1e9 + ts.tv_nsec;
 }
+
+void server_experiment_start() {
+  FILE *file = fopen("/tmp/experiment", "r+b");
+  int start_flag = 1;
+  int ret;
+  ret = fwrite(&start_flag, sizeof(int), 1, file);
+  if (ret != 1) {
+    log_err("fwrite error\n");
+    fclose(file);
+    return;
+  }
+  // log_info("write sync status 1 to /tmp/experiment");
+
+  ret = fflush(file);
+  if (ret) {
+    log_err("fflush error\n");
+    fclose(file);
+    return;
+  }
+
+  ret = fclose(file);
+  if (ret) {
+    log_err("fclose error\n");
+  }
+}
+
+unsigned rocksdb_cycles_per_us = 2000;
 
 #define N 5000
 std::string scan_keys[N];
@@ -87,6 +117,23 @@ static inline void DoScan(rocksdb_readoptions_t *readoptions) {
   rocksdb_iter_destroy(iter);
 }
 
+static inline void DoScan(rocksdb_readoptions_t *readoptions, int maxkey) {
+  const char *retr_key;
+  size_t klen;
+  rocksdb_iterator_t *iter = rocksdb_create_iterator(db, readoptions);
+  rocksdb_iter_seek_to_first(iter);
+  while (rocksdb_iter_valid(iter)) {
+    retr_key = rocksdb_iter_key(iter, &klen);
+    // log_debug("Scanned key %.*s\n", (int)klen, retr_key);
+    rocksdb_iter_next(iter);
+    
+    maxkey--;
+    if (maxkey <= 0)
+      break;
+  } 
+  rocksdb_iter_destroy(iter);
+}
+
 static inline void DoGet(rocksdb_readoptions_t *readoptions) {
   size_t klen;
   const char *retr_key;
@@ -99,34 +146,44 @@ static inline void DoGet(rocksdb_readoptions_t *readoptions) {
 }
 
 static inline void DoGet(rocksdb_readoptions_t *readoptions, int i) { 
+  // preempt_disable();
   char* err = NULL;
   size_t valuelen = 0;
   char *returned_value =
     rocksdb_get(db, readoptions, keys[i], keys_len[i], &valuelen, &err); 
-  
+  // assert(sqrt(i) >= 0);
   // assert(!err);
   // assert(returned_value != NULL && strncmp (returned_value, values[i], values_len[i]) == 0);
   // if ( strncmp (returned_value, values[i], values_len[i]) != 0 ) {
   //   printf("wrong value\n");
   // }
   free(returned_value);
+  // preempt_enable();
 }
 
 void get_test() {
   char *err = NULL;
-  for (int k = 0; k < 1000; ++k) {
+  for (int k = 0; k < 10; ++k) {
     rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
-    for (int i = 0; i < N; i++) {
-      int k = 1LL * i * i * i % N;
-      DoGet(readoptions, k);
+    for (int i = 0; i < 5000; i++) {
+      int kk = 1LL * i * i * i % N;
+      DoGet(readoptions, kk);
     }
     rocksdb_readoptions_destroy(readoptions);
   }
 }
 
+void get_warmup() {
+  preempt_disable();
+  rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
+  DoGet(readoptions, 33);
+  rocksdb_readoptions_destroy(readoptions);
+  preempt_enable();
+}
+
 void scan_test() {
   char *err = NULL;
-  for (int i = 0; i < 10500; i++) {
+  for (int i = 0; i < 50; i++) {
     rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
     DoScan(readoptions);
     rocksdb_readoptions_destroy(readoptions);
@@ -164,6 +221,7 @@ void print() {
 #endif
 
 static void HandleRequest(udp_spawn_data *d) {
+  // log_info("HanReq");
   const Payload *p = static_cast<const Payload *>(d->buf);
  
   rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
@@ -190,6 +248,8 @@ static void HandleLoop(udpconn_t *c) {
 	ssize_t ret, len;
 	struct netaddr addr;
 
+  // get_warmup();
+  
   while (true) {
 		ret = udp_read_from(c, buf, sizeof(Payload), &addr);
     assert(ret == sizeof(Payload));
@@ -198,6 +258,7 @@ static void HandleLoop(udpconn_t *c) {
     rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
     if (p->req_type == 11) {
       DoScan(readoptions);
+      // DoScan(readoptions, p->reqsize);
     }
     else if (p->req_type == 10) {
       DoGet(readoptions, p->reqsize);
@@ -236,33 +297,33 @@ void Get5000() {
     assert(!err);
     assert(returned_value != NULL && strncmp (returned_value, values[i], values_len[i]) == 0);
     if ( strncmp (returned_value, values[i], values_len[i]) != 0 ) {
-      unsigned char uif = _testui();
-      if (uif)
-        _clui();
+      // unsigned char uif = _testui();
+      // if (uif)
+      //   _clui();
       printf("wrong value\n");
       printf("%s %s %d\n", returned_value, values[i], values_len[i]);
-      if (uif)
-        _stui();
+      // if (uif)
+      //   _stui();
     }
     free(returned_value);
   }
 
-  unsigned char uif = _testui();
-  if (uif)
-    _clui();
+  // unsigned char uif = _testui();
+  // if (uif)
+  //   _clui();
   uint64_t first = durations[0];
   std::sort(std::begin(durations), std::end(durations));
   fprintf(stderr, "stats for %u iterations (GET): \n", cnt);
   fprintf(stderr, "avg: %0.3f\n",
-          (double)total / cnt / (double)cycles_per_us);
+          (double)total / cnt / (double)rocksdb_cycles_per_us);
   fprintf(stderr, "median: %0.3f\n",
-          (double)durations[cnt / 2] / (double)cycles_per_us);
+          (double)durations[cnt / 2] / (double)rocksdb_cycles_per_us);
   fprintf(stderr, "p99.9: %0.3f\n",
-          (double)durations[cnt * 999 / 1000] / (double)cycles_per_us);
+          (double)durations[cnt * 999 / 1000] / (double)rocksdb_cycles_per_us);
   fprintf(stderr, "first: %0.3f\n",
-          (double)first / (double)cycles_per_us);
-  if (uif)
-    _stui();
+          (double)first / (double)rocksdb_cycles_per_us);
+  // if (uif)
+  //   _stui();
 }
 
 void Put5000() {
@@ -286,17 +347,17 @@ void Put5000() {
     assert(!err);
   }
 
-  unsigned char uif = _testui();
-  if (uif)
-    _clui();
+  // unsigned char uif = _testui();
+  // if (uif)
+  //   _clui();
   std::sort(std::begin(durations), std::end(durations));
   fprintf(stderr, "stats for %u iterations (PUT): \n", cnt);
   fprintf(stderr, "median: %0.3f\n",
-          (double)durations[cnt / 2] / (double)cycles_per_us);
+          (double)durations[cnt / 2] / (double)rocksdb_cycles_per_us);
   fprintf(stderr, "p99.9: %0.3f\n",
-          (double)durations[cnt * 999 / 1000] / (double)cycles_per_us);
-  if (uif)
-    _stui();
+          (double)durations[cnt * 999 / 1000] / (double)rocksdb_cycles_per_us);
+  // if (uif)
+  //   _stui();
 }
 
 void PutInit() {
@@ -315,51 +376,66 @@ void PutInit() {
 }
 
 typedef void (*bench_type)(void);
+const int BENCH_NUM = 2;
+std::string bench_name[BENCH_NUM] = {"get", "scan"};
+bench_type bench_ptr[BENCH_NUM] = {get_test, scan_test};
+std::vector<std::string> task_name;
+std::vector<bench_type> task_ptr;
+
+bench_type name2ptr(std::string name) {
+	bench_type ptr = nullptr;
+	for (int i = 0; i < BENCH_NUM; ++i) {
+		if (name == bench_name[i]) {
+			ptr = bench_ptr[i];
+		}
+	}
+	return ptr;
+}
+
+void parse(std::string input) {
+	char delimiter = '+';
+  std::stringstream ss(input);
+  std::string name;
+
+  while (std::getline(ss, name, delimiter)) {
+    task_name.push_back(name);
+    task_ptr.push_back(name2ptr(name));
+  }
+
+	std::cout << "parsed tasks:";
+  for (const auto& t : task_name) {
+    std::cout << ' ' << t;
+  }
+	std::cout << std::endl;
+}
 
 void MainHandler_local(void *arg) {
-  srand(123);
-
+  // log_info("local");
+  // srand(123);
+  
   rt::WaitGroup wg(1);
 
-  cycles_per_us = 2000;
-  init_key_value();
-  rocksdb_init();
-  PutInit();
-
   // const int task_num = 2;
-  // std::string bench_name[task_num] = {"Get5000", "Get5000"};
-  // bench_type bench_ptr[task_num] = {Get5000, Get5000};
-
-
-  // const int task_num = 1;
-  // std::string bench_name[task_num] = {"scan_test"};
-  // bench_type bench_ptr[task_num] = {scan_test};
-
-  //   const int task_num = 1;
-  // std::string bench_name[task_num] = {"get_test"};
-  // bench_type bench_ptr[task_num] = {get_test};
-
-  const int task_num = 2;
-  std::string bench_name[task_num] = {"get_test", "scan_test"};
-  bench_type bench_ptr[task_num] = {get_test, scan_test};
+  // std::string bench_name[task_num] = {"get_test", "scan_test"};
+  // bench_type bench_ptr[task_num] = {get_test, scan_test};
 
   // The code can only run on single core.
   int started = 0, finished = 0;
-  for (int i = 0; i < task_num; ++i) {
+  for (int i = 0; i < task_ptr.size(); ++i) {
 		rt::Spawn([&, i]() {
       if (started == 0) {
          rt::UintrTimerStart();
       }
-
 			started += 1;
-     	if (started < task_num) {
-        rt::Yield();
-			}
+     	
+      // if (started < task_num) {
+      //   rt::Yield();
+			// }
 
-      bench_ptr[i]();
+      task_ptr[i]();
       finished += 1;
 
-			if (finished == task_num) {
+			if (finished == task_ptr.size()) {
 				rt::UintrTimerEnd();
 				rt::UintrTimerSummary();
 				wg.Done();
@@ -370,120 +446,11 @@ void MainHandler_local(void *arg) {
   wg.Wait();
 }
 
-void MainHandler(void *arg) {
-  cycles_per_us = 2000;
-  init_key_value();
-  rocksdb_init();
-  PutInit();
-
-  unsigned int i = 0;
-  uint64_t durations[1000];
-  unsigned long long total = 0;
-  for (i = 0; i < 1000; i++) {
-    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
-    uint64_t start = rdtscp(NULL);
-    DoScan(readoptions);
-    uint64_t end = rdtscp(NULL);
-    rocksdb_readoptions_destroy(readoptions);
-    durations[i] = end - start;
-    total += end - start;
-  }
-  std::sort(std::begin(durations), std::end(durations));
-  fprintf(stderr, "stats for %u Scan iterations: \n", i);
-  fprintf(stderr, "avg: %0.3f\n",
-          (double)total / i / (double)cycles_per_us);
-  fprintf(stderr, "median: %0.3f\n",
-          (double)durations[i / 2] / (double)cycles_per_us);
-  fprintf(stderr, "p99.9: %0.3f\n",
-          (double)durations[i * 999 / 1000] / (double)cycles_per_us);
-
-  uint64_t durations2[5000];  
-  total = 0;
-  for (i = 0; i < 5000; i++) {
-    int j = rand() % 5000;
-    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
-    uint64_t start = rdtscp(NULL);
-    barrier();
-    DoGet(readoptions, j);
-    barrier();
-    uint64_t end = rdtscp(NULL);
-    rocksdb_readoptions_destroy(readoptions);
-    durations2[i] = end - start;
-    total += end - start;
-  }
- 
-  std::sort(std::begin(durations2), std::end(durations2));
-  fprintf(stderr, "stats for %u Get iterations: \n", i);
-  fprintf(stderr, "avg: %0.3f\n",
-          (double)total / i / (double)cycles_per_us);
-  fprintf(stderr, "median: %0.3f\n",
-          (double)durations2[i / 2] / (double)cycles_per_us);
-  fprintf(stderr, "p99.9: %0.3f\n",
-          (double)durations2[i * 999 / 1000] / (double)cycles_per_us);
-
-  rt::UintrTimerStart();
-  
-  udpspawner_t *s;
-  int ret = udp_create_spawner(listen_addr, HandleRequest, &s);
-  if (ret) panic("ret %d", ret);
-
-  rt::WaitGroup w(1);
-  w.Wait();
-}
-
 unsigned num_port, num_conn;
 void MainHandler_udpconn(void *arg) {
-  cycles_per_us = 2000;
-  init_key_value();
-  rocksdb_init();
-  PutInit();
 
-  unsigned int i = 0;
-
-  uint64_t durations[1000];
-  unsigned long long total = 0;
-  for (i = 0; i < 1000; i++) {
-    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
-    uint64_t start = rdtscp(NULL);
-    DoScan(readoptions);
-    uint64_t end = rdtscp(NULL);
-    rocksdb_readoptions_destroy(readoptions);
-    durations[i] = end - start;
-    total += end - start;
-  }
-  std::sort(std::begin(durations), std::end(durations));
-  fprintf(stderr, "stats for %u Scan iterations: \n", i);
-  fprintf(stderr, "avg: %0.3f\n",
-          (double)total / i / (double)cycles_per_us);
-  fprintf(stderr, "median: %0.3f\n",
-          (double)durations[i / 2] / (double)cycles_per_us);
-  fprintf(stderr, "p99.9: %0.3f\n",
-          (double)durations[i * 999 / 1000] / (double)cycles_per_us);
-
-  uint64_t durations2[5000];  
-  total = 0;
-  for (i = 0; i < 5000; i++) {
-    int j = rand() % 5000;
-    rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
-    uint64_t start = rdtscp(NULL);
-    barrier();
-    DoGet(readoptions, j);
-    barrier();
-    uint64_t end = rdtscp(NULL);
-    rocksdb_readoptions_destroy(readoptions);
-    durations2[i] = end - start;
-    total += end - start;
-  }
- 
-  std::sort(std::begin(durations2), std::end(durations2));
-  fprintf(stderr, "stats for %u Get iterations: \n", i);
-  fprintf(stderr, "avg: %0.3f\n",
-          (double)total / i / (double)cycles_per_us);
-  fprintf(stderr, "median: %0.3f\n",
-          (double)durations2[i / 2] / (double)cycles_per_us);
-  fprintf(stderr, "p99.9: %0.3f\n",
-          (double)durations2[i * 999 / 1000] / (double)cycles_per_us);
-
+  server_experiment_start();
+  
   rt::WaitGroup wg(1);
   rt::UintrTimerStart();
 
@@ -505,6 +472,28 @@ void MainHandler_udpconn(void *arg) {
   }
 
   wg.Wait();
+}
+
+
+void MainHandler_test(void *arg) {
+  rt::UintrTimerStart();
+  scan_test();
+  rt::UintrTimerEnd();
+  rt::UintrTimerSummary();
+}
+
+void MainHandler(void *arg) {
+  server_experiment_start();
+  // rt::UintrTimerStart();
+  
+  rt::UTimerStart();
+
+  udpspawner_t *s;
+  int ret = udp_create_spawner(listen_addr, HandleRequest, &s);
+  if (ret) panic("ret %d", ret);
+
+  rt::WaitGroup w(1);
+  w.Wait();
 }
 
 void rocksdb_init() {
@@ -535,6 +524,15 @@ void rocksdb_init() {
 }
 
 int main(int argc, char *argv[]) {
+  rocksdb_cycles_per_us = 2000;
+  init_key_value();
+  log_info("kv");
+  rocksdb_init();
+  PutInit();
+  log_info("put");
+  // scan_test();
+  // get_test();
+
   if (argc < 3) {
     std::cerr << "usage: [cfg_file] [mode=local|udp|udpconn]" << std::endl;
     return -EINVAL;
@@ -543,6 +541,11 @@ int main(int argc, char *argv[]) {
   int ret;
   std::string mode = argv[2];
   if (mode == "local") {
+    if (argc < 4) {
+      std::cerr << "usage: [cfg_file] local tasks" << std::endl;
+      return -EINVAL;
+    }
+    parse(std::string(argv[3]));
     ret = runtime_init(argv[1], MainHandler_local, NULL);
   } else if (mode == "udp") {
     listen_addr.port = 5000;

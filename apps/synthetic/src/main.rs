@@ -28,6 +28,23 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+// use core::arch::x86::_rdtsc;
+use std::arch::x86_64::_rdtsc;
+const GHZ: u64 = 2;
+fn rdtsc() -> u64 {
+    // Safe wrapper around the _rdtsc intrinsic
+    unsafe { _rdtsc() }
+}
+fn elapsed_nanos(t: u64) -> u64 {
+    let cycles = unsafe { _rdtsc() - t };
+    (cycles / GHZ) as u64
+}
+fn diff_nanos(start: u64, end: u64) -> u64 {
+    let cycles = end - start;
+    (cycles / GHZ) as u64
+}
+
+
 use std::fs::{File, OpenOptions};
 
 use clap::{App, Arg};
@@ -49,11 +66,11 @@ use rocksdb::ReqType;
 pub struct Packet {
     work_iterations: u64,
     randomness: u64,
-    target_start: Duration,
-    actual_start: Option<Duration>,
+    target_start: u64,
+    actual_start: Option<u64>,
     completion_time_ns: AtomicU64,
     completion_server_tsc: Option<u64>,
-    completion_time: Option<Duration>,
+    completion_time: Option<u64>,
     // added by ZL
     server_lat: Option<u64>,
     req_type: u64,
@@ -319,9 +336,9 @@ struct RequestSchedule {
 }
 
 struct TraceResult {
-    actual_start: Option<Duration>,
-    target_start: Duration,
-    completion_time: Option<Duration>,
+    actual_start: Option<u64>,
+    target_start: u64,
+    completion_time: Option<u64>,
     server_tsc: u64,
 }
 
@@ -341,8 +358,8 @@ struct ScheduleResult {
     packet_count: usize,
     drop_count: usize,
     never_sent_count: usize,
-    first_send: Option<Duration>,
-    last_send: Option<Duration>,
+    first_send: Option<u64>,
+    last_send: Option<u64>,
     latencies: BTreeMap<u64, usize>,
     first_tsc: Option<u64>,
     trace: Option<Vec<TraceResult>>,
@@ -469,6 +486,16 @@ fn process_result_final(
         .sum::<usize>();
     let first_send = results.iter().filter_map(|res| res.first_send).min();
     let last_send = results.iter().filter_map(|res| res.last_send).max();
+    
+    // println!("first_send: {}, last_send: {}", first_send.as_nanos(), last_send.as_nanos());
+
+    // if let Some(first_send) = first_send {
+    //     println!("first_send: {}", first_send);
+    // } 
+    // if let Some(last_send) = last_send {
+    //     println!("last_send: {}", last_send);
+    // } 
+
     let first_tsc = results.iter().filter_map(|res| res.first_tsc).min();
     let start_unix = wct_start + sched_start;
 
@@ -573,67 +600,72 @@ fn process_result_final(
     let last_send = last_send.unwrap();
     let first_send = first_send.unwrap();
     let first_tsc = first_tsc.unwrap();
-    let start_unix = wct_start + first_send;
+    let start_unix = wct_start + Duration::from_nanos(first_send);
 
     let total_line = format!(
-        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}, {}, {}",
+        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}, {}, {}",
         sched.service.name(),
         sched.rps,
-        (packet_count + drop_count) as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
-        packet_count as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        (packet_count + drop_count) as u64 * 1000_000_000 / (last_send - first_send),
+        packet_count as u64 * 1000_000_000 / (last_send - first_send),
         packet_count,
         drop_count,
         never_sent_count,
         percentile(50.0) / 1000.0,
         percentile(90.0) / 1000.0,
+        percentile(95.0) / 1000.0,
         percentile(99.0) / 1000.0,
         percentile(99.9) / 1000.0,
         percentile(99.99) / 1000.0,
         start_unix.duration_since(UNIX_EPOCH).unwrap().as_secs(),
         first_tsc
     );
-    println!("{}", total_line);
-    let _ = write_line_to_file(&total_line, &format!("{}/total.csv", resultpath));
+    println!("Total: {}", total_line);
+    // let _ = write_line_to_file(&total_line, &format!("{}/total.csv", resultpath));
 
     let get_count = *per_type_packet_count.get(&(ReqType::Get as u64)).unwrap_or(&0);
     let get_drop = *per_type_drop_count.get(&(ReqType::Get as u64)).unwrap_or(&0);
     let get_never_sent = *per_type_never_sent.get(&(ReqType::Get as u64)).unwrap_or(&0);
     let get_line = format!(
-        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}",
+        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}",
         sched.service.name(),
         sched.rps,
-        (get_count + get_drop) as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
-        get_count as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        (get_count + get_drop) as u64 * 1000_000_000 / (last_send - first_send),
+        get_count as u64 * 1000_000_000 / (last_send - first_send),
         get_count,
         get_drop,
         get_never_sent,
         percentile2(ReqType::Get as u64, 50.0) / 1000.0,
         percentile2(ReqType::Get as u64, 90.0) / 1000.0,
+        percentile2(ReqType::Get as u64, 95.0) / 1000.0,
         percentile2(ReqType::Get as u64, 99.0) / 1000.0,
         percentile2(ReqType::Get as u64, 99.9) / 1000.0,
         percentile2(ReqType::Get as u64, 99.99) / 1000.0,
     );
-    let _ = write_line_to_file(&get_line, &format!("{}/get.csv", resultpath));
+    println!("Get: {}", get_line);
+    // let _ = write_line_to_file(&get_line, &format!("{}/get.csv", resultpath));
 
     let scan_count = *per_type_packet_count.get(&(ReqType::Scan as u64)).unwrap_or(&0);
     let scan_drop = *per_type_drop_count.get(&(ReqType::Scan as u64)).unwrap_or(&0);
     let scan_never_sent = *per_type_never_sent.get(&(ReqType::Scan as u64)).unwrap_or(&0);
     let scan_line = format!(
-        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}",
+        "{}, {}, {}, {}, {}, {}, {}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}, {:.3}",
         sched.service.name(),
         sched.rps,
-        (scan_count + scan_drop) as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
-        scan_count as u64 * 1000_000_000 / duration_to_ns(last_send - first_send),
+        (scan_count + scan_drop) as u64 * 1000_000_000 / (last_send - first_send),
+        scan_count as u64 * 1000_000_000 / (last_send - first_send),
         scan_count,
         scan_drop,
         scan_never_sent,
         percentile2(ReqType::Scan as u64, 50.0) / 1000.0,
         percentile2(ReqType::Scan as u64, 90.0) / 1000.0,
+        percentile2(ReqType::Scan as u64, 95.0) / 1000.0,
         percentile2(ReqType::Scan as u64, 99.0) / 1000.0,
         percentile2(ReqType::Scan as u64, 99.9) / 1000.0,
         percentile2(ReqType::Scan as u64, 99.99) / 1000.0,
     );
-    let _ = write_line_to_file(&scan_line, &format!("{}/scan.csv", resultpath));
+    println!("Scan: {}", scan_line);
+    // let _ = write_line_to_file(&scan_line, &format!("{}/scan.csv", resultpath));
 
     if let OutputMode::Buckets = sched.output {
         print!("Latencies: ");
@@ -672,20 +704,20 @@ fn process_result_final(
                 let actual_start = p.actual_start.unwrap();
                 print!(
                     "{}:{}:{}:{} ",
-                    duration_to_ns(actual_start),
-                    duration_to_ns(actual_start) as i64 - duration_to_ns(p.target_start) as i64,
-                    duration_to_ns(completion_time - actual_start),
+                    actual_start,
+                    actual_start as i64 - p.target_start as i64,
+                    completion_time - actual_start,
                     p.server_tsc,
                 )
             } else if p.actual_start.is_some() {
                 let actual_start = p.actual_start.unwrap();
                 print!(
                     "{}:{}:-1:-1 ",
-                    duration_to_ns(actual_start),
-                    duration_to_ns(actual_start) as i64 - duration_to_ns(p.target_start) as i64,
+                    actual_start,
+                    actual_start as i64 - p.target_start as i64,
                 )
             } else {
-                print!("{}:-1:-1:-1 ", duration_to_ns(p.target_start))
+                print!("{}:-1:-1:-1 ", p.target_start)
             }
         }
         println!("");
@@ -719,26 +751,35 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], index: usize)
     per_type_never_sent.insert(ReqType::Get as u64, 0);
     per_type_never_sent.insert(ReqType::Scan as u64, 0);
     
+    let mut pcnt = 0;
     for p in packets.iter() {
+        // println!("p.actual_start: {}", p.actual_start.as_micros());
+        // if let Some(actual_start) = p.actual_start {
+        //     println!("p.actual_start: {}", actual_start.as_micros());
+        // } else {
+        //     println!("p.actual_start is None");
+        // }
         match (p.actual_start, p.completion_time) {
             (None, _) => {
-                // println!("never sent: {}",never_sent );
+                // println!("{}: never sent", pcnt);
                 never_sent += 1;
                 *per_type_never_sent
                     .entry(p.req_type)
                     .or_insert(0) += 1;
             }
             (_, None) => {
-                // println!("dropped: {}", dropped);
+                // println!("{}: dropped", pcnt);
                 dropped += 1;
                 *per_type_drop_count
                     .entry(p.req_type)
                     .or_insert(0) += 1;
             }
             (Some(ref start), Some(ref end)) => {
-                // println!("sent");
+                // if pcnt % 10 == 0 {
+                    // println!("se: {} {}", *start, *end);
+                // }
                 *latencies
-                    .entry(duration_to_ns(*end - *start)) // / 1000)
+                    .entry(*end - *start) // / 1000)
                     .or_insert(0) += 1;
                 *per_type_packet_count
                     .entry(p.req_type)
@@ -750,10 +791,11 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], index: usize)
             (_, None, _) => {},
             (_, _, None) => {},
             (Some(ref start), Some(ref end), Some(ref jtype)) => {
+                // println!("{}: {} {} {} {}", pcnt, jtype, *start, *end, *end - *start);
                 *per_type_latencies
                     .entry(*jtype)
                     .or_insert(BTreeMap::new())
-                    .entry(duration_to_ns(*end - *start)) //  / 1000) 
+                    .entry(*end - *start) //  / 1000) 
                     .or_insert(0) += 1
             }
         }
@@ -768,6 +810,7 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], index: usize)
                     .or_insert(0) += 1
             }
         }
+        pcnt += 1
     }
 
     if packets.len() - dropped - never_sent <= 1 {
@@ -809,34 +852,6 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], index: usize)
         _ => None,
     };
 
-    // let mut file = match File::create(format!("/data/preempt/caladan-rocksdb/apps/synthetic/rocksdb_concord/result_50/uintr_opt123/5_8udp64_nosleep/{}",  index)) {
-    //     Ok(file) => file,
-    //     Err(e) => {
-    //         eprintln!("Error creating the file: {}", e);
-    //         return None;
-    //     }
-    // };
-
-    // if let Err(e) = file.set_len(0) {
-    //     eprintln!("Error truncating the file: {}", e);
-    //     return None;
-    // }
-
-    // for p in packets.iter() {
-    //     match (p.actual_start, p.completion_time) {
-    //         (Some(ref start), None) => {
-    //             writeln!(file, "s={} dropped", start.as_micros());
-    //         }
-    //         (Some(ref start), Some(ref end)) => {
-    //             let duration = *end - *start;
-    //             writeln!(file, "s={} e={} d={}", start.as_micros(), end.as_micros(), duration.as_micros());
-    //         }
-    //         (None, _) => {
-    //             writeln!(file, "Never sent");
-    //         }
-    //     }
-    // }
-
     Some(ScheduleResult {
         packet_count: packets.len() - dropped - never_sent,
         drop_count: dropped,
@@ -866,14 +881,14 @@ fn print_result(end: usize, packets: &[Packet]) -> Result<File, io::Error> {
     };
 
     packets.iter().for_each(|p| {
-        let start: Duration = match p.actual_start {
+        let start = match p.actual_start {
             Some(d) => d,
-            None => Duration::default(),
+            None => 0,
         };
 
-        let end: Duration = match p.completion_time {
+        let end = match p.completion_time {
             Some(d) => d,
-            None => Duration::default(),
+            None => 0,
         };
 
         // writeln!(file, "{:?} {:?} {}", start, end, duration_to_ns(end - start)).expect("Failed to write to file");
@@ -891,6 +906,7 @@ fn run_client_worker(
     wg: shenango::WaitGroup,
     wg_start: shenango::WaitGroup,
     schedules: Arc<Vec<RequestSchedule>>,
+    packets_per_second: usize,
     index: usize,
 ) -> Vec<Option<ScheduleResult>> {
     let mut packets: Vec<Packet> = Vec::new();
@@ -899,8 +915,11 @@ fn run_client_worker(
 
     let mut sched_boundaries = Vec::new();
 
-    let mut last = 100_000_000;
-    let mut end = 100_000_000;
+    // let mut last = 100_000_000;
+    // let mut end = 100_000_000;
+    let mut last = 10_000_000;
+    let mut end = 10_000_000;
+    let mut loop_cnt = 0;
     for sched in schedules.iter() {
         end += duration_to_ns(sched.runtime);
         loop {
@@ -909,22 +928,34 @@ fn run_client_worker(
                 break;
             }
             last = nxt;
+            // if loop_cnt % 100 == 0 {
+            //     println!("last[{}]: {}", loop_cnt, last);
+            // }
             packets.push(Packet {
                 randomness: rng.gen::<u64>(),
-                target_start: Duration::from_nanos(last),
+                // target_start: Duration::from_nanos(last),
+                target_start: last,
                 work_iterations: sched.service.sample(&mut rng),
                 ..Default::default()
             });
+            loop_cnt += 1;
+            if loop_cnt >= packets_per_second / 5 {
+                break
+            }
         }
         // println!("{}: {}", index, packets.len());
         sched_boundaries.push(packets.len());
     }
 
+    println!("schedules created: {} requests", packets.len());
+    let _ = client_experiment_start();
+    
     let src_addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), (100 + index) as u16);
     let socket = Arc::new(match tport {
         Transport::Tcp => backend.create_tcp_connection(Some(src_addr), addr).unwrap(),
         Transport::Udp => backend.create_udp_connection(src_addr, Some(addr)).unwrap(),
     });
+    // println!("socket");
 
     let packets_per_thread = packets.len();
     let socket2 = socket.clone();
@@ -933,7 +964,9 @@ fn run_client_worker(
     let receive_thread = backend.spawn_thread(move || {
         let mut recv_buf = vec![0; 4096];
         let mut receive_times = vec![None; packets_per_thread];
+        // let mut receive_times = vec![None; 1];
         wg2.done();
+        // println!("worker: rcv init done");
         for _ in 0..receive_times.len() {
             /* 
             match rproto.read_response(&socket2, &mut recv_buf[..]) {
@@ -951,7 +984,12 @@ fn run_client_worker(
             }*/
             // added by ZL
             match rproto.read_response_w_server_lat(&socket2, &mut recv_buf[..]) {
-                Ok((idx, tsc, run_us)) => receive_times[idx] = Some((Instant::now(), tsc, run_us)),
+                // Ok((idx, tsc, run_us)) => receive_times[idx] = Some((Instant::now(), tsc, run_us)),
+                Ok((idx, tsc, run_us)) => {
+                    if (idx < receive_times.len()) {
+                        receive_times[idx] = Some((rdtsc(), tsc, run_us));
+                    }
+                }
                 Err(e) => {
                     match e.raw_os_error() {
                         Some(-103) | Some(-104) => break,
@@ -969,53 +1007,90 @@ fn run_client_worker(
 
     // If the send or receive thread is still running 500 ms after it should have finished,
     // then stop it by triggering a shutdown on the socket.
-    let last = packets[packets.len() - 1].target_start;
-    let socket2 = socket.clone();
-    let wg2 = wg.clone();
-    let wg3 = wg_start.clone();
-    let timer = backend.spawn_thread(move || {
-        wg2.done();
-        wg3.wait();
-        backend.sleep(last + Duration::from_millis(500));
-        if Arc::strong_count(&socket2) > 1 {
-            socket2.shutdown();
-        }
-    });
+    // let last = packets[packets.len() - 1].target_start;
+    // println!("last: {}", last);
+    // let socket2 = socket.clone();
+    // let wg2 = wg.clone();
+    // let wg3 = wg_start.clone();
+    // let timer = backend.spawn_thread(move || {
+    //     wg2.done();
+    //     println!("worker: timer init done");
+    //     wg3.wait();
+    //     // backend.sleep(last + Duration::from_millis(20));
+    //     backend.sleep(Duration::from_nanos(last + 2000_000));
+    //     if Arc::strong_count(&socket2) > 1 {
+    //         socket2.shutdown();
+    //     }
+    // });
 
     wg.done();
+    // println!("worker: send init done");
     wg_start.wait();
-    let start = Instant::now();
-    // println!("##### send");
+    // let start = Instant::now();
+    println!("worker: send starts");
+    let start = rdtsc();
     for (i, packet) in packets.iter_mut().enumerate() {
         payload.clear();
         packet.req_type = proto.gen_req(i, packet, &mut payload);
         
-        // println!("Length: {}, {:?}", payload.len(), payload);
+        // println!("{}", packet.work_iterations);
+        // println!("worker: sleep {}", i);
+        // let mut t = start.elapsed();
+        // while t + Duration::from_micros(1) < packet.target_start {
+        //     backend.sleep(packet.target_start - t);
+        //     t = start.elapsed();
+        // }
 
-        let mut t = start.elapsed();
-        while t + Duration::from_micros(1) < packet.target_start {
-            // backend.sleep(packet.target_start - t);
-            t = start.elapsed();
+        let mut t = elapsed_nanos(start);
+        while t + 1000 < packet.target_start {
+            // println!("t: {}", t);
+            // if i > 0 {
+            backend.sleep(Duration::from_nanos(packet.target_start - t));
+            // }
+            t = elapsed_nanos(start);
         }
-        if t > packet.target_start + Duration::from_micros(5) {
+        if t > packet.target_start + 5_000 {
             continue;
         }
 
-        packet.actual_start = Some(start.elapsed());
+        // packet.actual_start = Some(start.elapsed());
+        packet.actual_start = Some(elapsed_nanos(start));
         if let Err(e) = (&*socket).write_all(&payload[..]) {
             packet.actual_start = None;
+            println!("send error {}", i);
             match e.raw_os_error() {
                 Some(-32) | Some(-103) | Some(-104) => {}
                 _ => println!("Send thread ({}/{}): {}", i, packets.len(), e),
             }
             break;
         }
+
+        // if i % 100 == 0 {
+            // println!("{}", i);
+        // }
     }
     
+    println!("worker: send ends");
     wg.done();
     wg_start.wait();
+    println!("worker: can join");
+    
+    let socket2 = socket.clone();
+    backend.sleep(Duration::from_nanos(30_000_000));
+    if Arc::strong_count(&socket2) > 1 {
+        socket2.shutdown();
+    }
+    println!("worker: timer ends, try to kill");
 
-    timer.join().unwrap();
+    let _ = client_experiment_end();
+    client_experiment_check();
+    let spin_until = rdtsc() + 8500000;
+	while rdtsc() < spin_until {}
+        
+    println!("worker: switch");
+
+    // timer.join().unwrap();
+    // println!("worker: timer ends");
     receive_thread
         .join()
         .unwrap()
@@ -1029,12 +1104,14 @@ fn run_client_worker(
         }*/
         .for_each(|(c, p)| {
             if let Some((inst, tsc, run_us)) = c {
-                (*p).completion_time = Some(inst - start);
+                // (*p).completion_time = Some(inst - start);
+                (*p).completion_time = Some(diff_nanos(start, inst));
                 (*p).completion_server_tsc = Some(tsc);
                 (*p).server_lat = Some(run_us);
             }
         });
 
+    println!("worder: rcv ends");
     let mut start_index = 0;
     schedules
         .iter()
@@ -1059,12 +1136,13 @@ fn run_client(
     tport: Transport,
     barrier_group: &mut Option<lockstep::Group>,
     schedules: Vec<RequestSchedule>,
+    packets_per_second: usize,
     index: usize,
     resultpath: &String,
 ) -> bool {
     let schedules = Arc::new(schedules);
     let wg = shenango::WaitGroup::new();
-    wg.add(3 * nthreads as i32);
+    wg.add(2 * nthreads as i32);
     let wg_start = shenango::WaitGroup::new();
     wg_start.add(1 as i32);
 
@@ -1093,14 +1171,15 @@ fn run_client(
 
             backend.spawn_thread(move || {
                 run_client_worker(
-                    proto, backend, sockaddr, tport, wg, wg_start, schedules, client_idx,
+                    proto, backend, sockaddr, tport, wg, wg_start, schedules, packets_per_second / nthreads, client_idx,
                 )
             })
         })
         .collect();
 
-    backend.sleep(Duration::from_secs(10));
+    // backend.sleep(Duration::from_secs(10));
     wg.wait();
+    // println!("run_client: all threads init done");
 
     if let Some(ref mut g) = *barrier_group {
         g.barrier();
@@ -1113,6 +1192,7 @@ fn run_client(
     wg_start.add(1 as i32);
 
     wg.wait();
+    // println!("run_client: all threads work done");
     wg_start.done();
 
     let mut packets: Vec<Vec<Option<ScheduleResult>>> = conn_threads
@@ -1155,7 +1235,7 @@ fn run_local(
                     last += sched.arrival.sample(&mut rng);
                     thread_packets.push(Packet {
                         randomness: rng.gen::<u64>(),
-                        target_start: Duration::from_nanos(last),
+                        target_start: last,
                         work_iterations: sched.service.sample(&mut rng),
                         ..Default::default()
                     });
@@ -1166,7 +1246,8 @@ fn run_local(
         .collect();
 
     let start_unix = SystemTime::now();
-    let start = Instant::now();
+    // let start = Instant::now();
+    let start = rdtsc();
 
     struct AtomicU64Pointer(*const AtomicU64);
     unsafe impl Send for AtomicU64Pointer {}
@@ -1181,12 +1262,16 @@ fn run_local(
                 let (work_iterations, completion_time_ns, rnd) = {
                     let packet = &mut packets[i];
 
-                    let mut t = start.elapsed();
+                    // let mut t = start.elapsed();
+                    // while t < packet.target_start {
+                    //     t = start.elapsed();
+                    // }
+                    let mut t = elapsed_nanos(start);
                     while t < packet.target_start {
-                        t = start.elapsed();
+                        t = elapsed_nanos(start);
                     }
 
-                    packet.actual_start = Some(start.elapsed());
+                    packet.actual_start = Some(elapsed_nanos(start));
                     (
                         packet.work_iterations,
                         AtomicU64Pointer(&packet.completion_time_ns as *const AtomicU64),
@@ -1200,7 +1285,8 @@ fn run_local(
                     worker.work(work_iterations, rnd);
                     unsafe {
                         (*completion_time_ns.0)
-                            .store(start.elapsed().as_nanos() as u64, Ordering::SeqCst);
+                            // .store(start.elapsed().as_nanos() as u64, Ordering::SeqCst);
+                            .store(elapsed_nanos(start) as u64, Ordering::SeqCst);
                     }
                     remaining.fetch_sub(1, Ordering::SeqCst);
                 });
@@ -1211,12 +1297,13 @@ fn run_local(
             }
 
             for p in packets.iter_mut() {
-                p.completion_time = Some(Duration::from_nanos(
+                p.completion_time = Some(
                     p.completion_time_ns.load(Ordering::SeqCst),
-                ));
+                );
             }
 
-            let mut start = Duration::from_nanos(100_000_000);
+            // let mut start = Duration::from_nanos(100_000_000);
+            let mut start = 100_000_000;
             let mut start_index = 0;
 
             schedules
@@ -1224,7 +1311,7 @@ fn run_local(
                 .map(|sched| {
                     let npackets = packets[start_index..]
                         .iter()
-                        .position(|p| p.target_start >= start + sched.runtime)
+                        .position(|p| p.target_start >= start + duration_to_ns(sched.runtime))
                         .unwrap_or(packets.len() - start_index - 1)
                         + 1;
                     let res =
@@ -1255,6 +1342,74 @@ fn run_local(
         .collect::<Vec<bool>>()
         .into_iter()
         .all(|p| p)
+}
+
+fn client_experiment_start() -> io::Result<()> {
+    loop {
+        let mut file = match File::open("/tmp/experiment") {
+            Ok(file) => file,
+            Err(_) => {
+                // sleep(Duration::from_millis(100));
+                continue;
+            }
+        };
+
+        let mut buffer = [0; 4]; // Assuming i32, which is 4 bytes
+        if let Err(e) = file.read_exact(&mut buffer) {
+            eprintln!("Error reading from file: {}", e);
+            // sleep(Duration::from_millis(100));
+            continue;
+        }
+
+        let status = i32::from_le_bytes(buffer);
+        if status == 1 {
+            // println!("Read {}", status);
+            break;
+        }
+
+        // sleep(Duration::from_millis(100));
+    }
+
+    Ok(())
+}
+
+
+fn client_experiment_check() -> io::Result<()> {
+    // println!("client_experiment_check\n");
+
+        let mut file = match File::open("/tmp/experiment") {
+            Ok(file) => file,
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
+        let mut buffer = [0; 4]; // Assuming i32, which is 4 bytes
+        if let Err(e) = file.read_exact(&mut buffer) {
+            eprintln!("Error reading from file: {}", e);
+            // sleep(Duration::from_millis(100));
+            return Err(e);
+            }
+
+        let status = i32::from_le_bytes(buffer);
+        // println!("Check {}", status);
+
+    Ok(())
+}
+
+fn client_experiment_end() -> io::Result<()> {
+    // println!("client_experiment_end\n");
+    let end_status: i32 = 2;
+
+    let mut file = OpenOptions::new()
+    .write(true)
+    .open("/tmp/experiment")?;
+
+    let bytes = end_status.to_le_bytes(); 
+
+    file.write_all(&bytes)?;
+
+    Ok(())
 }
 
 fn main() {
@@ -1416,7 +1571,7 @@ fn main() {
             Arg::with_name("rampup")
                 .long("rampup")
                 .takes_value(true)
-                .default_value("4")
+                .default_value("0")
                 .help("per-sample ramp up seconds"),
         )
         .arg(
@@ -1593,17 +1748,18 @@ fn main() {
                 });
 
                 // println!("Distribution, RPS, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
-                let total_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start";
-                let _ = init_file(&format!("{}/total.csv", resultpath));
-                let _ = write_line_to_file(total_line,  &format!("{}/total.csv", resultpath));
+                let total_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 95th, 99th, 99.9th, 99.99th, Start";
+                println!("Total: {}", total_line);
+                // let _ = init_file(&format!("{}/total.csv", resultpath));
+                // let _ = write_line_to_file(total_line,  &format!("{}/total.csv", resultpath));
                 
-                let get_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th";
-                let _ = init_file(&format!("{}/get.csv", resultpath));
-                let _ = write_line_to_file(get_line,  &format!("{}/get.csv", resultpath));
+                // let get_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th";
+                // let _ = init_file(&format!("{}/get.csv", resultpath));
+                // let _ = write_line_to_file(get_line,  &format!("{}/get.csv", resultpath));
 
-                let scan_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th";
-                let _ = init_file(&format!("{}/scan.csv", resultpath));
-                let _ = write_line_to_file(scan_line,  &format!("{}/scan.csv", resultpath));
+                // let scan_line = "Distribution, TotalRPS, Target, Actual, Sent, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th";
+                // let _ = init_file(&format!("{}/scan.csv", resultpath));
+                // let _ = write_line_to_file(scan_line,  &format!("{}/scan.csv", resultpath));
                 
                 match (matches.value_of("protocol").unwrap(), &barrier_group) {
                     (_, Some(lockstep::Group::Client(ref _c))) => (),
@@ -1627,6 +1783,7 @@ fn main() {
                         tport,
                         &mut barrier_group,
                         sched,
+                        0,
                         0,
                         &resultpath,
                     );
@@ -1657,6 +1814,7 @@ fn main() {
                             tport,
                             &mut barrier_group,
                             sched,
+                            packets_per_second,
                             0,
                             &resultpath,
                         );
@@ -1688,7 +1846,7 @@ fn main() {
                 // backend.sleep(Duration::from_secs(10));
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
-                    backend.sleep(Duration::from_secs(3));
+                    // backend.sleep(Duration::from_secs(3));
                     let sched = gen_classic_packet_schedule(
                         runtime,
                         start_packets_per_second + step_size * j,
@@ -1698,6 +1856,7 @@ fn main() {
                         nthreads,
                         discard_pct,
                     );
+                    // let _ = client_experiment_start();
                     if !run_client(
                         &workload,
                         proto.clone(),
@@ -1707,6 +1866,7 @@ fn main() {
                         tport,
                         &mut barrier_group,
                         sched,
+                        start_packets_per_second + step_size * j,
                         j,
                         &resultpath,
                     ) { break; }

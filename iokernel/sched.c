@@ -161,6 +161,24 @@ static struct thread *sched_pick_kthread(struct proc *p, unsigned int core)
 	return list_tail(&p->idle_threads, struct thread, idle_link);
 }
 
+int cores_pin_thread(pid_t tid, int core)
+{
+	cpu_set_t cpuset;
+	int ret;
+
+	CPU_ZERO(&cpuset);
+	CPU_SET(core, &cpuset);
+
+	ret = sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset);
+	if (ret < 0) {
+		log_warn("cores: failed to set affinity for thread %d with err %d",
+				tid, errno);
+		return -errno;
+	}
+
+	return 0;
+}
+
 static int
 __sched_run(struct core_state *s, struct thread *th, unsigned int core)
 {
@@ -184,6 +202,8 @@ __sched_run(struct core_state *s, struct thread *th, unsigned int core)
 
 	/* finally request that the new kthread run on this core */
 	ksched_run(core, th ? th->tid : 0);
+	int ret = cores_pin_thread(th->tid, core);
+	log_info("cores_pin_thread(%d, %d) = %d", th->tid, core, ret);
 
 	s->last_th = s->cur_th;
 	s->cur_th = th;

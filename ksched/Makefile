@@ -1,4 +1,6 @@
-KDIR ?= /lib/modules/$(shell uname -r)/build
+KDIR ?= /lib/modules/6.0.0/build
+# KDIR ?= /lib/modules/$(shell uname -r)/build
+# KDIR ?= /lib/modules/5.4.0-177-generic/build
 BUILD_DIR ?= $(PWD)/build
 BUILD_DIR_MAKEFILE ?= $(PWD)/build/Makefile
 

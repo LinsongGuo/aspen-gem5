@@ -112,6 +112,9 @@ void dataplane_loop(void)
 	uint32_t n_bufs = 0;
 	uint32_t *n_bufs_ptr = &n_bufs;
 
+	// sleep(3);
+	// m5_switch_cpu_addr();
+
 	/* run until quit or killed */
 	for (;;) {
 		work_done = false;
@@ -120,11 +123,13 @@ void dataplane_loop(void)
 #ifndef SIMULATED_NIC
 		work_done |= rx_burst();
 #else
+		// if (*n_bufs_ptr)
+		// log_info("rx_burst: n_bufs: %d", *n_bufs_ptr);
 		work_done |= rx_burst(bufs, n_bufs_ptr);
 #endif
 
 		/* adjust core assignments */
-		sched_poll();
+		// sched_poll();
 
 		/* drain overflow completion queues */
 		work_done |= tx_drain_completions();
@@ -134,6 +139,8 @@ void dataplane_loop(void)
 		work_done |= tx_burst();
 #else
 		work_done |= tx_burst(bufs, n_bufs_ptr);
+		// if (*n_bufs_ptr)
+		// log_info("tx_burst: n_bufs: %d", *n_bufs_ptr);
 #endif
 
 		/* process a batch of commands from runtimes */
@@ -167,11 +174,10 @@ static void print_usage(void)
 
 int main(int argc, char *argv[])
 {
-	printf("------------ iokernel\n");
+	// printf("------------ iokernel\n");
 	m5op_addr = 0xFFFF0000;
     map_m5_mem();
-	m5_switch_cpu_addr();
-
+	
 	int i, ret;
 
 	if (getuid() != 0) {
@@ -274,6 +280,12 @@ int main(int argc, char *argv[])
 
 	pthread_barrier_wait(&init_barrier);
 
+	// sleep(3);
+	// m5_switch_cpu_addr();
+
 	dataplane_loop();
+
+	m5_exit();
+
 	return 0;
 }

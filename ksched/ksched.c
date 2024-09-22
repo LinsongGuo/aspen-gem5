@@ -9,7 +9,7 @@
 #include <asm/set_memory.h>
 #include <asm/msr-index.h>
 #include <asm/msr.h>
-#include <asm/mwait.h>
+// #include <asm/mwait.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
@@ -178,13 +178,13 @@ static int ksched_mwait_on_addr(const unsigned int *addr, unsigned int hint,
 		return cur;
 
 	/* then arm the monitor address and recheck to avoid a race */
-	__monitor(addr, 0, 0);
+	// __monitor(addr, 0, 0);
 	cur = smp_load_acquire(addr);
 	if (cur != val)
 		return cur;
 
 	/* finally, execute mwait, and recheck after waking up */
-	__mwait(hint, MWAIT_ECX_INTERRUPT_BREAK);
+	// __mwait(hint, MWAIT_ECX_INTERRUPT_BREAK);
 	return smp_load_acquire(addr);
 }
 
@@ -314,10 +314,15 @@ park:
 static long ksched_start(void)
 {
 	/* put this task to sleep and reschedule so the next task can run */
+	printk(KERN_INFO "ksched_start enters");
 	__set_current_state(TASK_INTERRUPTIBLE);
+	printk(KERN_INFO "ksched_start set ");
 	mark_task_parked(current);
+	printk(KERN_INFO "ksched_start move ");
 	schedule();
+	printk(KERN_INFO "ksched_start schedule ");
 	__set_current_state(TASK_RUNNING);
+	printk(KERN_INFO "ksched_start set2 ");
 	return get_granted_core_id();
 }
 
@@ -398,6 +403,7 @@ static long ksched_intr(struct ksched_intr_req __user *ureq)
 static long
 ksched_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
+	printk(KERN_INFO "ksched_ioctl");
 	/* validate input */
 	if (unlikely(_IOC_TYPE(cmd) != KSCHED_MAGIC))
 		return -ENOTTY;
@@ -453,6 +459,7 @@ static int __init ksched_cpuidle_hijack(void)
 	struct cpuidle_driver *drv;
 
 	drv = cpuidle_get_driver();
+	// printk(KERN_INFO "cpuidle_get_driver: %x", drv);
 	if (!drv)
 		return -ENOENT;
 	if (drv->state_count <= 0)
@@ -496,10 +503,10 @@ static int __init ksched_init(void)
 	dev_t devno_ksched = MKDEV(KSCHED_MAJOR, KSCHED_MINOR);
 	int ret;
 
-	if (!cpu_has(&boot_cpu_data, X86_FEATURE_MWAIT)) {
-		printk(KERN_ERR "ksched: mwait support is required");
-		return -ENOTSUPP;
-	}
+	// if (!cpu_has(&boot_cpu_data, X86_FEATURE_MWAIT)) {
+	// 	printk(KERN_ERR "ksched: mwait support is required");
+	// 	return -ENOTSUPP;
+	// }
 
 	ret = register_chrdev_region(devno_ksched, 1, "ksched");
 	if (ret)
@@ -517,16 +524,19 @@ static int __init ksched_init(void)
 	}
 	memset(shm, 0, SHM_SIZE);
 
-	ret = ksched_cpuidle_hijack();
-	if (ret)
-		goto fail_hijack;
+	// printk(KERN_INFO "before ksched_cpuidle_hijack");
+	// ret = ksched_cpuidle_hijack();
+	// printk(KERN_INFO "ksched_cpuidle_hijack: %d", ret);
+	// if (ret)
+	// 	goto fail_hijack;
+	printk(KERN_INFO "skip ksched_cpuidle_hijack");
 
 	smp_call_function(ksched_init_pmc, NULL, 1);
 	printk(KERN_INFO "ksched: API V2 enabled");
 	return 0;
 
-fail_hijack:
-	vfree(shm);
+// fail_hijack:
+// 	vfree(shm);
 fail_shm:
 	cdev_del(&ksched_cdev);
 fail_ksched_cdev_add:
@@ -536,6 +546,8 @@ fail_ksched_cdev_add:
 
 static void __exit ksched_exit(void)
 {
+	printk(KERN_INFO "ksched: API V2 disabled");
+
 	int cpu;
 	struct ksched_percpu *p;
 

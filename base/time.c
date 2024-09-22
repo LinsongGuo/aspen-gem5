@@ -53,6 +53,7 @@ static int time_calibrate_tsc(void)
 
 		secs = (double)ns / 1000;
 		cycles_per_us = (uint64_t)((end - start) / secs);
+		cycles_per_us = 2000;
 		log_info("time: detected %d ticks / us", cycles_per_us);
 
 		/* record the start time of the binary */

@@ -15,7 +15,7 @@ extern "C" {
 #include "timer.h"
 // #include <base/log.h>
 
-barrier_t barrier;
+// #include <m5_mmap.h>
 
 namespace {
 
@@ -29,11 +29,11 @@ std::vector<std::string> task_name;
 std::vector<bench_type> task_ptr;
 long long task_result[128];
 
-long long now() {
-	struct timespec ts;
-	timespec_get(&ts, TIME_UTC);
-	return ts.tv_sec * 1e9 + ts.tv_nsec;
-}
+// long long now() {
+// 	struct timespec ts;
+// 	timespec_get(&ts, TIME_UTC);
+// 	return ts.tv_sec * 1e9 + ts.tv_nsec;
+// }
 
 bench_type name2ptr(std::string name) {
 	bench_type ptr = nullptr;
@@ -84,53 +84,62 @@ void parse(std::string input) {
 }
 
 
-void MainHandler(void *arg) {	// printf("enter handler\n");
+void MainHandler(void *arg) {	
+	printf("handler\n");
 	rt::WaitGroup wg(1);
-	barrier_init(&barrier, 1);
 	
 	// Init functions for benchmarks.
-  	base64_init();
+  	// base64_init();
 	// cmp_init();
 	
-	rt::UintrTimerStart();
-	_stui();
-
 	int started = 0, finished = 0;
 	int task_num = task_name.size();
 	for (int i = 0; i < task_num; ++i) {
 		rt::Spawn([&, i]() {
-			started += 1;
-    		// printf("%s start: %d %d\n", task_name[i].c_str(), i, started);
+			// printf("%s start: %d %d\n", task_name[i].c_str(), i, started);
+			if (started == 0) {
+				rt::UintrTimerStart();
+			}
 			
+			started += 1;
 			if (started < task_num) {
 				rt::Yield();
 			}
-			
+
 			task_result[i] = task_ptr[i]();
 					
 			finished += 1;
 			if (finished == task_num) {
+				rt::UintrTimerEnd();
+				rt::UintrTimerSummary();
 				wg.Done();
-			}
+     		}
     	});
 	}
 	
 	wg.Wait();
 
-	rt::UintrTimerEnd();
 	printf("results:");
 	for (int t = 0; t < task_num; ++t) {
 		printf(" %lld", task_result[t]);
 	}
 	printf("\n");
-	
-	rt::UintrTimerSummary();
 }
 
+void MainHandler2(void *arg)  {
+	rt::UintrTimerStart();
+	sum();
+	rt::UintrTimerEnd();
+	rt::UintrTimerSummary();
+}
 }  // anonymous namespace
 
 
 int main(int argc, char *argv[]) {
+	// m5op_addr = 0xFFFF0000;
+    // map_m5_mem();	
+	// m5_switch_cpu_addr();
+
 	int ret;
 	
 	if (argc != 3) {
@@ -142,14 +151,13 @@ int main(int argc, char *argv[]) {
 	worker_spec = std::string(argv[2]);
 	parse(worker_spec);
 	
-	ret = runtime_init(argv[1], MainHandler, NULL);
+	ret = runtime_init(argv[1], MainHandler2, NULL);
 	
-	printf("runtime_init ends\n");
-
 	if (ret) {
 		printf("failed to start runtime\n");
 		return ret;
 	}
 	
+	// m5_exit();
 	return 0;
 }

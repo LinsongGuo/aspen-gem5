@@ -56,8 +56,10 @@ export PKG_CONFIG_PATH=$PWD/rdma-core/build/lib/pkgconfig
 cd dpdk
 git apply ../build/dpdk.patch
 meson build
+meson configure -Dplatform=native build
 meson configure -Ddisable_drivers=$disable_driver build
 meson configure -Dprefix=$PWD/build build
+meson configure -Dc_args="-mno-sse -mno-avx -mno-avx512f" build
 ninja -C build
 ninja -C build install
 cd ..
@@ -67,13 +69,13 @@ export EXTRA_LDFLAGS=
 export PKG_CONFIG_PATH=
 
 
-echo building SPDK
-cd spdk
-git apply ../build/spdk.patch
-git apply ../build/spdk2.patch
-./configure --with-dpdk=$PWD/../dpdk/build/
-make -j $CORES
-cd ..
+# echo building SPDK
+# cd spdk
+# git apply ../build/spdk.patch
+# git apply ../build/spdk2.patch
+# ./configure --with-dpdk=$PWD/../dpdk/build/
+# make -j $CORES
+# cd ..
 
 echo building PCM
 cd deps/pcm

@@ -16,6 +16,9 @@ fn main() {
     println!("cargo:rustc-link-lib=static=runtime");
     println!("cargo:rustc-flags=-L ../..");
 
+    println!("cargo:rustc-link-lib=static=m5");
+    println!("cargo:rustc-flags=-L ../../m5");
+
     // consult shared.mk for other libraries... sorry y'all.
     let output = Command::new("make")
         .args(&[

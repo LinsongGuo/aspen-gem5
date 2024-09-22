@@ -60,16 +60,24 @@ static void dp_clients_add_client(struct proc *p)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+/*
 		ret = rte_dev_dma_map(dp.device, p->region.base, 0, p->region.len);
 		if (ret < 0) {
 			log_err("dp_clients: failed to map DMA memory for client");
 			goto fail_extmem;
 		}
+*/
 #pragma GCC diagnostic pop
 	}
 
 	if (p->has_vfio_directpath)
 		directpath_dataplane_attach(p);
+
+	ret = sched_add_kthread(p);
+	if (ret < 0) {
+		log_err("dp_clients: failed to add kthread in client");
+		goto fail;
+	}
 
 	return;
 
@@ -122,9 +130,11 @@ static void dp_clients_remove_client(struct proc *p)
 		if (!p->attach_fail) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+/*
 			ret = rte_dev_dma_unmap(dp.device, p->region.base, 0, p->region.len);
 			if (ret < 0)
 				log_err("dp_clients: failed to unmap DMA memory for client");
+*/
 #pragma GCC diagnostic pop
 			ret = rte_extmem_unregister(p->region.base, p->region.len);
 			if (ret < 0)

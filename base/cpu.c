@@ -6,6 +6,8 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/syscall.h>
+#include <unistd.h>
+#include <sched.h>
 
 #include <base/stddef.h>
 #include <base/log.h>
@@ -25,23 +27,24 @@ struct cpu_info cpu_info_tbl[NCPU];
 
 static int cpu_scan_topology(void)
 {
-	char path[PATH_MAX];
-	DEFINE_BITMAP(numa_mask, NNUMA);
-	DEFINE_BITMAP(cpu_mask, NCPU);
-	uint64_t tmp;
+	// char path[PATH_MAX];
+	// DEFINE_BITMAP(numa_mask, NNUMA);
+	// DEFINE_BITMAP(cpu_mask, NCPU);
 	int i;
 
 	/* How many NUMA nodes? */
-	if (sysfs_parse_bitlist("/sys/devices/system/node/online",
-			        numa_mask, NNUMA))
-		return -EIO;
-	bitmap_for_each_set(numa_mask, NNUMA, i) {
-		numa_count++;
-		if (numa_count <= i) {
-			log_err("cpu: can't support non-contiguous NUMA mask.");
-			return -EINVAL;
-		}
-	}
+	// if (sysfs_parse_bitlist("/sys/devices/system/node/online",
+	// 		        numa_mask, NNUMA))
+	// 	return -EIO;
+	// bitmap_for_each_set(numa_mask, NNUMA, i) {
+	// 	numa_count++;
+	// 	if (numa_count <= i) {
+	// 		log_err("cpu: can't support non-contiguous NUMA mask.");
+	// 		return -EINVAL;
+	// 	}
+	// }
+
+	numa_count = 1;
 
 	if (numa_count <= 0 || numa_count > NNUMA) {
 		log_err("cpu: detected %d NUMA nodes, unsupported count.",
@@ -50,17 +53,32 @@ static int cpu_scan_topology(void)
 	}
 	
 	/* How many CPUs? */
-	if (sysfs_parse_bitlist("/sys/devices/system/cpu/online",
-			        cpu_mask, NCPU))
-		return -EIO;
-	bitmap_for_each_set(cpu_mask, NCPU, i) {
-		cpu_count++;
-		if (cpu_count <= i) {
-			log_err("cpu: can't support non-contiguous CPU mask.");
-			return -EINVAL;
+	// if (sysfs_parse_bitlist("/sys/devices/system/cpu/online",
+	// 		        cpu_mask, NCPU))
+	// 	return -EIO;
+	// bitmap_for_each_set(cpu_mask, NCPU, i) {
+	// 	cpu_count++;
+	// 	if (cpu_count <= i) {
+	// 		log_err("cpu: can't support non-contiguous CPU mask.");
+	// 		return -EINVAL;
+	// 	}
+	// }
+
+	int coreid[100];
+	cpu_set_t cpuset; 
+	sched_getaffinity(0, sizeof(cpu_set_t), &cpuset); 
+	for (i = 0; i < sizeof(cpu_set_t); i++) {
+		if (CPU_ISSET(i, &cpuset)) {
+			coreid[cpu_count] = i;
+			cpu_count++;
+			// if (cpu_count <= i) {
+			// 	log_err("cpu: can't support non-contiguous CPU mask.");
+			// 	return -EINVAL;
+			// }
 		}
 	}
 
+	log_info("cpu_count: %d", cpu_count);
 	if (cpu_count <= 0 || cpu_count > NCPU) {
 		log_err("cpu: detected %d CPUs, unsupported count.",
 			cpu_count);
@@ -69,25 +87,39 @@ static int cpu_scan_topology(void)
 
 	/* Scan the CPU topology. */
 	for (i = 0; i < cpu_count; i++) {
-		snprintf(path, sizeof(path), SYSFS_CPU_TOPOLOGY_PATH
-			 "/physical_package_id", i);
-		if (sysfs_parse_val(path, &tmp))
-			return -EIO;
-		if (tmp > UINT_MAX)
-			return -ERANGE;
-		cpu_info_tbl[i].package = (int)tmp;
+		cpu_info_tbl[coreid[i]].package = 0;
 
-		snprintf(path, sizeof(path), SYSFS_CPU_TOPOLOGY_PATH
-			 "/core_siblings_list", i);
-		if (sysfs_parse_bitlist(path,
-			cpu_info_tbl[i].core_siblings_mask, cpu_count))
-			return -EIO;
+		// int j;
+		// for (j = 0; j < cpu_count; ++j) {
+		// 	bitmap_set(cpu_info_tbl[i].core_siblings_mask, j);
+		// }
+		int j;
+		for (j = 0; j < cpu_count; ++j) {
+			bitmap_set(cpu_info_tbl[coreid[i]].core_siblings_mask, coreid[j]);
+		}
 
-		snprintf(path, sizeof(path), SYSFS_CPU_TOPOLOGY_PATH
-			 "/thread_siblings_list", i);
-		if (sysfs_parse_bitlist(path,
-			cpu_info_tbl[i].thread_siblings_mask, cpu_count))
-			return -EIO;
+		bitmap_set(cpu_info_tbl[coreid[i]].thread_siblings_mask, coreid[i]);
+		
+		// snprintf(path, sizeof(path), SYSFS_CPU_TOPOLOGY_PATH
+		// 	 "/physical_package_id", i);
+		// if (sysfs_parse_val(path, &tmp))
+		// 	return -EIO;
+		// if (tmp > UINT_MAX)
+		// 	return -ERANGE;
+		// cpu_info_tbl[i].package = (int)tmp;
+
+		// snprintf(path, sizeof(path), SYSFS_CPU_TOPOLOGY_PATH
+		// 	 "/core_siblings_list", i);
+		// if (sysfs_parse_bitlist(path,
+		// 	cpu_info_tbl[i].core_siblings_mask, cpu_count))
+		// 	return -EIO;
+
+		// snprintf(path, sizeof(path), SYSFS_CPU_TOPOLOGY_PATH
+		// 	 "/thread_siblings_list", i);
+		// if (sysfs_parse_bitlist(path,
+		// 	cpu_info_tbl[i].thread_siblings_mask, cpu_count))
+		// 	return -EIO;
+
 	}
 
 	return 0;

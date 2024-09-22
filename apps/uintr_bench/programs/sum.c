@@ -18,15 +18,13 @@
 // 	return res;
 // }
 
-const int N = 4e4;
+const int N = 1024;
 
 long long sum() {
 // int main() {
 	long long sum = 0;
 	
-	_clui();
 	int *data = (int*) malloc(sizeof(int) * N);
-	_stui();
 	
 	int i, j;
 	for (i = 0; i < N; ++i) {
@@ -39,10 +37,16 @@ long long sum() {
 		}
 	}
 
-	_clui();
-	// printf("%lld\n", sum);
 	free(data);
-	_stui();
 
 	return sum;
 }
+
+// long long sum() {
+//     unsigned n = 200000, s = 0;
+//     for (int i = 1; i <= n; ++i) {
+//         s += i*i;
+//     }
+
+// 	return (long long )s;
+// }

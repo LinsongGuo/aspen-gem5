@@ -87,11 +87,17 @@ static __noreturn void jmp_thread(thread_t *th)
 		while (load_acquire(&th->thread_running))
 			cpu_relax();
 	}
+	// log_info("relax");
 	th->thread_running = true;
-#ifdef SMART_PREEMPT
+
+#ifndef M5_UTIMER
 	uintr_timer_upd(myk()->kthread_idx);
 	barrier();
+#else
+	m5_utimer(uthread_quantum_us * 1000000);
 #endif
+
+	// log_info("real jp");
 	__jmp_thread(&th->tf);
 }
 
@@ -323,6 +329,7 @@ static __noinline bool do_watchdog(struct kthread *l)
 /* the main scheduler routine, decides what to run next */
 static __noreturn __noinline void schedule(void)
 {
+	// log_info("schedule()");
 	struct kthread *r = NULL, *l = myk();
 	uint64_t start_tsc;
 	thread_t *th = NULL;
@@ -335,6 +342,7 @@ static __noreturn __noinline void schedule(void)
 
 	/* detect misuse of preempt disable */
 	BUG_ON((perthread_read(preempt_cnt) & ~PREEMPT_NOT_PENDING) != 1);
+	// log_info("schedule() 1");
 
 	/* unmark busy for the stack of the last uthread */
 	if (likely(perthread_get_stable(__self) != NULL)) {
@@ -346,23 +354,24 @@ static __noreturn __noinline void schedule(void)
 	STAT(RESCHEDULES)++;
 	start_tsc = rdtsc();
 	STAT(PROGRAM_CYCLES) += start_tsc - perthread_read_stable(last_tsc);
+	// log_info("schedule() 2");
 
 	/* increment the RCU generation number (even is in scheduler) */
 	store_release(&l->rcu_gen, l->rcu_gen + 1);
 	ACCESS_ONCE(l->q_ptrs->rcu_gen) = l->rcu_gen;
 	assert((l->rcu_gen & 0x1) == 0x0);
+	// log_info("schedule() 3");
 
-	/* check for pending preemption */
-	if (unlikely(preempt_cede_needed(l))) {
-		l->parked = true;
-		spin_unlock(&l->lock);
-		kthread_park_now();
-		start_tsc = rdtsc();
-		iters = 0;
-		spin_lock(&l->lock);
-		l->parked = false;
-	}
-
+	// /* check for pending preemption */
+	// if (unlikely(preempt_cede_needed(l))) {
+	// 	l->parked = true;
+	// 	spin_unlock(&l->lock);
+	// 	kthread_park_now();
+	// 	start_tsc = rdtsc();
+	// 	iters = 0;
+	// 	spin_lock(&l->lock);
+	// 	l->parked = false;
+	// }
 #ifdef GC
 	if (unlikely(get_gc_gen() != l->local_gc_gen))
 		gc_kthread_report(l);
@@ -376,6 +385,7 @@ static __noreturn __noinline void schedule(void)
 		if (do_watchdog(l))
 			goto done;
 	}
+	// log_info("schedule() 4");
 
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
@@ -384,9 +394,11 @@ static __noreturn __noinline void schedule(void)
 	/* first try the local runqueue */
 	if (l->rq_head != l->rq_tail)
 		goto done;
+	// log_info("schedule() 5");
 
 again:
 
+	// log_info("schedule() again");
 	if (unlikely(!mbufq_empty(&l->txpktq_overflow)))
 		net_tx_drain_overflow();
 
@@ -421,29 +433,33 @@ again:
 		gc_kthread_report(l);
 #endif
 
+	if (!is_load_generator)
+		utimer_end_ornot();
+
 	/* keep trying to find work until the polling timeout expires */
-	perthread_get_stable(last_tsc) = rdtsc();
-	if (!preempt_cede_needed(l) &&
-	    (++iters < RUNTIME_SCHED_POLL_ITERS ||
-	     perthread_get_stable(last_tsc) - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US ||
-	     storage_pending_completions(&l->storage_q) ||
-	     !mbufq_empty(&l->txpktq_overflow))) {
-		goto again;
-	}
+	// perthread_get_stable(last_tsc) = rdtsc();
+	// if (!preempt_cede_needed(l) &&
+	//     (++iters < RUNTIME_SCHED_POLL_ITERS ||
+	//      perthread_get_stable(last_tsc) - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US ||
+	//      storage_pending_completions(&l->storage_q) ||
+	//      !mbufq_empty(&l->txpktq_overflow))) {
+	// 	goto again;
+	// }
 
-	l->parked = true;
+	// l->parked = true;
 
-	/* did not find anything to run, park this kthread */
-	STAT(SCHED_CYCLES) += perthread_get_stable(last_tsc) - start_tsc;
-	/* we may have got a preempt signal before voluntarily yielding */
-	kthread_park();
-	start_tsc = rdtsc();
-	iters = 0;
+	// /* did not find anything to run, park this kthread */
+	// STAT(SCHED_CYCLES) += perthread_get_stable(last_tsc) - start_tsc;
+	// /* we may have got a preempt signal before voluntarily yielding */
+	// kthread_park();
+	// start_tsc = rdtsc();
+	// iters = 0;
 
-	l->parked = false;
+	// l->parked = false;
 	goto again;
 
 done:
+	// log_info("schedule() done");
 	/* pop off a thread and run it */
 	assert(l->rq_head != l->rq_tail);
 	th = l->rq[l->rq_tail++ % RUNTIME_RQ_SIZE];
@@ -473,6 +489,7 @@ done:
 	ACCESS_ONCE(l->q_ptrs->rcu_gen) = l->rcu_gen;
 	assert((l->rcu_gen & 0x1) == 0x1);
 
+	// log_info("schedule() jmp");
 	/* and jump into the next thread */
 	jmp_thread(th);
 }
@@ -779,15 +796,20 @@ void thread_cede(void)
  *
  * Yielding will give other threads and softirqs a chance to run.
  */
+// int tyd = 0;
 void thread_yield(void)
 {
 	thread_t *curth = thread_self();
 
+	preempt_disable();
+
 	/* check for softirqs */
 	softirq_run();
 
-	preempt_disable();
 	curth->thread_ready = false;
+	// tyd++;
+	// if (tyd % 50 == 0)
+		// log_info("tyd: %d", tyd);
 	thread_ready(curth);
 	enter_schedule(curth);
 }
@@ -945,6 +967,7 @@ void thread_exit(void)
  */
 static __noreturn void schedule_start(void)
 {
+	// log_info("schedule_start starts");
 	struct kthread *k = myk();
 
 	/*
@@ -955,7 +978,9 @@ static __noreturn void schedule_start(void)
 	if (k->q_ptrs->oldest_tsc == 0)
 		ACCESS_ONCE(k->q_ptrs->oldest_tsc) = UINT64_MAX;
 	ACCESS_ONCE(k->parked) = true;
+	// log_info("kthread_wait_to_attach starts");
 	kthread_wait_to_attach();
+	// log_info("kthread_wait_to_attach ends");
 	perthread_store(last_tsc, rdtsc());
 	store_release(&k->rcu_gen, 1);
 	ACCESS_ONCE(k->q_ptrs->rcu_gen) = 1;

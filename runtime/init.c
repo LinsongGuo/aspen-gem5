@@ -12,6 +12,8 @@
 
 #include "defs.h"
 
+#include <m5_mmap.h>
+
 static pthread_barrier_t init_barrier;
 pthread_t kth_tid[NCPU];
 
@@ -67,7 +69,7 @@ static const struct init_entry thread_init_handlers[] = {
 	THREAD_INITIALIZER(sched),
 	THREAD_INITIALIZER(timer),
 	THREAD_INITIALIZER(smalloc),
-	THREAD_INITIALIZER(uintr),
+	// THREAD_INITIALIZER(uintr),
 
 	/* network stack */
 	THREAD_INITIALIZER(net),
@@ -90,7 +92,7 @@ static const struct init_entry late_init_handlers[] = {
 	LATE_INITIALIZER(directpath),
 
 	/* runtime core */
-	LATE_INITIALIZER(uintr),
+	// LATE_INITIALIZER(uintr),
 };
 
 static int run_init_handlers(const char *phase,
@@ -170,6 +172,9 @@ int runtime_set_initializers(initializer_fn_t global_fn,
  */
 int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 {
+	m5op_addr = 0xFFFF0000;
+    map_m5_mem();
+
 	int ret, i;
 
 	ret = ioqueues_init_early();
@@ -215,6 +220,14 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 	}
 	kth_tid[0] = pthread_self();
 
+	if (!is_load_generator && uthread_quantum_us < 100000000) {
+#ifndef M5_UTIMER
+		pthread_barrier_init(&uintr_init_barrier, NULL, 2);
+		uintr_init_early_late();
+		pthread_barrier_wait(&uintr_init_barrier);
+#endif
+	}
+
 	pthread_barrier_wait(&init_barrier);
 
 	ret = ioqueues_register_iokernel();
@@ -233,6 +246,24 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 	ret = run_init_handlers("late", late_init_handlers,
 				ARRAY_SIZE(late_init_handlers));
 	BUG_ON(ret);
+
+	log_info("********** is_load_generator: %d", is_load_generator);
+	if (!is_load_generator) {
+		log_info("sleep(5) starts and then switch to gem5.");
+		sleep(5);
+
+		// log_info("========== switching ======");
+		long long switch_end_tsc = rdtsc() + 8500000;
+		m5_switch_cpu_addr();
+		while(rdtsc() < switch_end_tsc);
+	}
+
+	if (!is_load_generator && uthread_quantum_us < 100000000) {
+		uintr_init_thread();
+#ifndef M5_UTIMER
+		uintr_init_late();
+#endif
+	}
 
 	if (late_init_hook) {
 		ret = late_init_hook();

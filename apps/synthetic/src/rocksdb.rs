@@ -47,6 +47,7 @@ impl LoadgenProtocol for RocksDBProtocol {
             id: i as u32,
             req_type: rtype as u32,
             req_size: key as u32,
+            // req_size: p.work_iterations as u32,
             run_ns: 0,
         }
         .serialize_into(buf)
@@ -76,7 +77,7 @@ impl RocksDBProtocol {
 
         RocksDBProtocol {
             nvalues: 5000, // value_t!(matches, "r_nvalues", u64).unwrap(),
-            pct_scan: 50, // value_t!(matches, "pctscan", u64).unwrap(),
+            pct_scan: 5, // value_t!(matches, "pctscan", u64).unwrap(),
 	}
     }
 

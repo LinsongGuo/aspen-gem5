@@ -22,7 +22,7 @@
 #include <runtime/thread.h>
 #include <runtime/rcu.h>
 #include <runtime/preempt.h>
-
+#include <runtime/uintr.h>
 
 /*
  * constant limits
@@ -650,6 +650,7 @@ extern unsigned int cfg_request_hardware_queues;
 extern uint64_t cfg_ht_punish_us;
 extern uint64_t cfg_qdelay_us;
 extern uint64_t cfg_quantum_us;
+extern bool is_load_generator;
 
 extern void kthread_park(void);
 extern void kthread_park_now(void);
@@ -888,6 +889,7 @@ extern int rcu_init_late(void);
 extern int directpath_init_late(void);
 extern int net_init_late(void);
 extern int uintr_init_late(void);
+extern int uintr_init_early_late(void);
 
 extern int ioqueues_init_early(void);
 extern int net_init_mempool_late(void);

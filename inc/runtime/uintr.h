@@ -8,9 +8,12 @@
 #include <x86intrin.h>
 #include <runtime/thread.h>
 
+extern pthread_barrier_t uintr_init_barrier;
 extern void uintr_timer_start(void);
 extern void uintr_timer_end(void);
 extern void uintr_timer_summary(void);
+extern void utimer_start(void);
+extern void utimer_end_ornot(void);
 
 extern void signal_block(void);
 extern void signal_unblock(void);

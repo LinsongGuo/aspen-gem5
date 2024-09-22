@@ -61,7 +61,7 @@ char **dpdk_argv;
 int dpdk_argc;
 
 static const struct rte_eth_conf port_conf_default = {
-	.rxmode = {
+	/*.rxmode = {
 		.mtu = IOKERNEL_MTU,
 		.offloads = RTE_ETH_RX_OFFLOAD_IPV4_CKSUM,
 		.mq_mode = RTE_ETH_MQ_RX_RSS | RTE_ETH_MQ_RX_RSS_FLAG,
@@ -74,7 +74,7 @@ static const struct rte_eth_conf port_conf_default = {
 	},
 	.txmode = {
 		.offloads = RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_UDP_CKSUM | RTE_ETH_TX_OFFLOAD_TCP_CKSUM,
-	},
+	},*/
 };
 
 /*
@@ -241,7 +241,9 @@ int dpdk_init(void)
 		// ARGV("--allow");
 		// ARGV(nic_pci_addr_str);
 	} else {
+#ifndef SIMULATED_NIC	
 		ARGV("--vdev=net_tap0");
+#endif
 	}
 
 	/* include any user-supplied arguments */
@@ -264,11 +266,13 @@ int dpdk_init(void)
 		return -1;
 	}
 
+#ifndef SIMULATED_NIC
 	/* check that there is a port to send/receive on */
 	if (!rte_eth_dev_is_valid_port(0)) {
 		log_err("dpdk: no available ports");
 		return -1;
 	}
+#endif
 
 	if (rte_lcore_count() > 1)
 		log_warn("dpdk: too many lcores enabled, only 1 used");
@@ -283,10 +287,12 @@ int dpdk_late_init(void)
 {
 	/* initialize port */
 	dp.port = 1;
+#ifndef SIMULATED_NIC
 	if (dpdk_port_init(dp.port, dp.rx_mbuf_pool) != 0) {
 		log_err("dpdk: cannot init port %"PRIu8 "\n", dp.port);
 		return -1;
 	}
+#endif
 
 	return 0;
 }

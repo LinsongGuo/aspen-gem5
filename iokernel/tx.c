@@ -72,13 +72,13 @@ static void tx_prepare_tx_mbuf(struct rte_mbuf *buf,
 	buf->ol_flags = 0;
 	if (net_hdr->olflags != 0) {
 		if (net_hdr->olflags & OLFLAG_IP_CHKSUM)
-			buf->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;
+			buf->ol_flags |= PKT_TX_IP_CKSUM; //RTE_MBUF_F_TX_IP_CKSUM;
 		if (net_hdr->olflags & OLFLAG_TCP_CHKSUM)
-			buf->ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;
+			buf->ol_flags |= PKT_TX_TCP_CKSUM; // RTE_MBUF_F_TX_TCP_CKSUM;
 		if (net_hdr->olflags & OLFLAG_IPV4)
-			buf->ol_flags |= RTE_MBUF_F_TX_IPV4;
+			buf->ol_flags |= PKT_TX_IPV4; // RTE_MBUF_F_TX_IPV4;
 		if (net_hdr->olflags & OLFLAG_IPV6)
-			buf->ol_flags |= RTE_MBUF_F_TX_IPV6;
+			buf->ol_flags |= PKT_TX_IPV6; // RTE_MBUF_F_TX_IPV6; 
 
 		buf->l4_len = sizeof(struct rte_tcp_hdr);
 		buf->l3_len = sizeof(struct rte_ipv4_hdr);
@@ -364,7 +364,7 @@ static struct rte_mempool *tx_pktmbuf_completion_pool_create(const char *name,
 
 	ret = rte_mempool_set_ops_byname(mp, "completion", NULL);
 	if (ret != 0) {
-		log_err("tx: error setting mempool handler");
+		log_err("tx: error setting mempool handler: %d", ret);
 		rte_mempool_free(mp);
 		rte_errno = -ret;
 		return NULL;
@@ -389,6 +389,8 @@ static struct rte_mempool *tx_pktmbuf_completion_pool_create(const char *name,
  */
 int tx_init(void)
 {
+
+#ifndef SIMULATED_NIC
 	/* create a mempool to hold struct rte_mbufs and handle completions */
 	tx_mbuf_pool = tx_pktmbuf_completion_pool_create("TX_MBUF_POOL",
 			IOKERNEL_NUM_COMPLETIONS, sizeof(struct tx_pktmbuf_priv),
@@ -398,6 +400,7 @@ int tx_init(void)
 		log_err("tx: couldn't create tx mbuf pool");
 		return -1;
 	}
+#endif
 
 	return 0;
 }

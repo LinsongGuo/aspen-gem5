@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <base/stddef.h>
+#include <base/log.h>
 
 #include "defs.h"
 #include "sched.h"
@@ -118,6 +119,7 @@ static void simple_detach(struct proc *p)
 
 static int simple_run_kthread_on_core(struct proc *p, unsigned int core)
 {
+	// log_info("*** simple_run_kthread %p on_core %d", p, core);
 	struct simple_data *sd = (struct simple_data *)p->policy_data;
 	int ret;
 
@@ -205,6 +207,7 @@ static unsigned int simple_choose_core(struct proc *p)
 
 static int simple_add_kthread(struct proc *p)
 {
+	// log_info("*** simple_add_kthread: %p", p);
 	struct simple_data *sd = (struct simple_data *)p->policy_data;
 	unsigned int core;
 
@@ -216,6 +219,10 @@ static int simple_add_kthread(struct proc *p)
 		return -ENOENT;
 
 	return simple_run_kthread_on_core(p, core);
+}
+
+int sched_add_kthread(struct proc *p) {
+	return simple_add_kthread(p);
 }
 
 static int simple_notify_core_needed(struct proc *p)

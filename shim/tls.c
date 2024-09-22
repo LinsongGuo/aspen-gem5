@@ -88,7 +88,7 @@ static struct key_data *get_ts_struct(int key)
 			arr = calloc(MAX_KEYS, sizeof(struct key_data));
 			//  __asm__ volatile("mfence" ::: "memory");
 			// uint64_t end = __rdtsc();
-			// printf("alloc: %lu\n", end - start);
+			// printf("alloc: %p\n", arr);
 			BUG_ON(!arr);
 			set_uthread_specific((uint64_t)arr);
 		}
