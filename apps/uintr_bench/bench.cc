@@ -96,9 +96,10 @@ void MainHandler(void *arg) {
 	int task_num = task_name.size();
 	for (int i = 0; i < task_num; ++i) {
 		rt::Spawn([&, i]() {
-			// printf("%s start: %d %d\n", task_name[i].c_str(), i, started);
+			printf("%s start: %d %d\n", task_name[i].c_str(), i, started);
 			if (started == 0) {
 				rt::UintrTimerStart();
+				// printf("UintrTimerStart\n");
 			}
 			
 			started += 1;
@@ -151,7 +152,7 @@ int main(int argc, char *argv[]) {
 	worker_spec = std::string(argv[2]);
 	parse(worker_spec);
 	
-	ret = runtime_init(argv[1], MainHandler2, NULL);
+	ret = runtime_init(argv[1], MainHandler, NULL);
 	
 	if (ret) {
 		printf("failed to start runtime\n");

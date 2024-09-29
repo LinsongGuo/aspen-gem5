@@ -38,7 +38,7 @@ void server_experiment_start() {
     fclose(file);
     return;
   }
-  // log_info("write sync status 1 to /tmp/experiment");
+  log_info("write sync status 1 to /tmp/experiment");
 
   ret = fflush(file);
   if (ret) {
@@ -183,7 +183,7 @@ void get_warmup() {
 
 void scan_test() {
   char *err = NULL;
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 10; i++) {
     rocksdb_readoptions_t *readoptions = rocksdb_readoptions_create();
     DoScan(readoptions);
     rocksdb_readoptions_destroy(readoptions);
@@ -411,8 +411,9 @@ void parse(std::string input) {
 
 void MainHandler_local(void *arg) {
   // log_info("local");
-  // srand(123);
   
+  server_experiment_start();
+
   rt::WaitGroup wg(1);
 
   // const int task_num = 2;
@@ -448,8 +449,6 @@ void MainHandler_local(void *arg) {
 
 unsigned num_port, num_conn;
 void MainHandler_udpconn(void *arg) {
-
-  server_experiment_start();
   
   rt::WaitGroup wg(1);
   rt::UintrTimerStart();
@@ -471,6 +470,8 @@ void MainHandler_udpconn(void *arg) {
     }
   }
 
+  server_experiment_start();
+
   wg.Wait();
 }
 
@@ -484,9 +485,6 @@ void MainHandler_test(void *arg) {
 
 void MainHandler(void *arg) {
   server_experiment_start();
-  // rt::UintrTimerStart();
-  
-  rt::UTimerStart();
 
   udpspawner_t *s;
   int ret = udp_create_spawner(listen_addr, HandleRequest, &s);
@@ -526,12 +524,8 @@ void rocksdb_init() {
 int main(int argc, char *argv[]) {
   rocksdb_cycles_per_us = 2000;
   init_key_value();
-  log_info("kv");
   rocksdb_init();
   PutInit();
-  log_info("put");
-  // scan_test();
-  // get_test();
 
   if (argc < 3) {
     std::cerr << "usage: [cfg_file] [mode=local|udp|udpconn]" << std::endl;

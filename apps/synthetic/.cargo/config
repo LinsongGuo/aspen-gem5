@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-C", "link-arg=-T/../../../../../base/base.ld"]
+rustflags = ["-C", "link-arg=-T/caladan-uintr/base/base.ld"]

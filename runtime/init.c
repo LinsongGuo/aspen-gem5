@@ -141,6 +141,13 @@ static void *pthread_entry(void *data)
 
 	pthread_barrier_wait(&init_barrier);
 	pthread_barrier_wait(&init_barrier);
+
+	pthread_barrier_wait(&uintr_init_barrier);
+	if (!is_load_generator && uthread_quantum_us < 100000000) {
+		uintr_init_thread();
+	}
+	pthread_barrier_wait(&uintr_init_barrier);
+
 	sched_start();
 
 	/* never reached unless things are broken */
@@ -196,6 +203,7 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 	log_info("process pid: %u", getpid());
 
 	pthread_barrier_init(&init_barrier, NULL, maxks);
+	pthread_barrier_init(&uintr_init_barrier, NULL, maxks);
 
 	ret = run_init_handlers("global", global_init_handlers,
 				ARRAY_SIZE(global_init_handlers));
@@ -220,14 +228,6 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 	}
 	kth_tid[0] = pthread_self();
 
-	if (!is_load_generator && uthread_quantum_us < 100000000) {
-#ifndef M5_UTIMER
-		pthread_barrier_init(&uintr_init_barrier, NULL, 2);
-		uintr_init_early_late();
-		pthread_barrier_wait(&uintr_init_barrier);
-#endif
-	}
-
 	pthread_barrier_wait(&init_barrier);
 
 	ret = ioqueues_register_iokernel();
@@ -247,6 +247,14 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 				ARRAY_SIZE(late_init_handlers));
 	BUG_ON(ret);
 
+	if (!is_load_generator && uthread_quantum_us < 100000000) {
+#ifndef M5_UTIMER
+		pthread_barrier_init(&uintr_timer_barrier, NULL, 2);
+		uintr_init_early();
+		pthread_barrier_wait(&uintr_timer_barrier);
+#endif
+	}
+
 	log_info("********** is_load_generator: %d", is_load_generator);
 	if (!is_load_generator) {
 		log_info("sleep(5) starts and then switch to gem5.");
@@ -258,12 +266,17 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 		while(rdtsc() < switch_end_tsc);
 	}
 
+	pthread_barrier_wait(&uintr_init_barrier);
+
 	if (!is_load_generator && uthread_quantum_us < 100000000) {
 		uintr_init_thread();
 #ifndef M5_UTIMER
 		uintr_init_late();
 #endif
 	}
+
+	pthread_barrier_wait(&uintr_init_barrier);
+	uintr_timer_start_internal();
 
 	if (late_init_hook) {
 		ret = late_init_hook();

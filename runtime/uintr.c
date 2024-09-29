@@ -44,6 +44,7 @@ int uipi_index[MAX_KTHREADS];
 long long uintr_sent[MAX_KTHREADS], uintr_recv[MAX_KTHREADS];
 volatile int uintr_timer_flag = 0;
 pid_t uintr_timer_tid;
+pthread_barrier_t uintr_timer_barrier;
 pthread_barrier_t uintr_init_barrier;
 
 volatile int *cpu_preempt_points[MAX_KTHREADS];
@@ -179,13 +180,7 @@ void uintr_timer_upd(int kidx) {
 
 void* uintr_timer(void*) {
     uintr_timer_tid = thread_gettid();
-    pthread_barrier_wait(&uintr_init_barrier);
-    // log_info("&&&&& uintr_timer");
-    // _clui();
-
-    // base_init_thread();
-
-    // set_thread_affinity(4);
+    pthread_barrier_wait(&uintr_timer_barrier);
 
 #ifdef SIGNAL_PREEMPT
     signal_block();
@@ -243,12 +238,15 @@ void* uintr_timer(void*) {
     return NULL;
 }
 
-void uintr_timer_start() {
+void uintr_timer_start_internal() {
 #ifdef M5_UTIMER
     if (uthread_quantum_us < 100000000)
         m5_utimer(uthread_quantum_us * 1000000);
 #endif
 	uintr_timer_flag = 1;
+}
+
+void uintr_timer_start() {
     start = now();
     tsc1 = rdtsc();
 }
@@ -263,32 +261,32 @@ void uintr_timer_end() {
 	uintr_timer_flag = -1;
 }
 
-void utimer_start() {
-  FILE *file = fopen("/tmp/experiment", "r+b");
-  int start_flag = 1;
+// void utimer_start() {
+//   FILE *file = fopen("/tmp/experiment", "r+b");
+//   int start_flag = 1;
   
-  int ret = fwrite(&start_flag, sizeof(int), 1, file);
-  if (ret != 1) {
-    log_err("fwrite error\n");
-    fclose(file);
-    return;
-  }
-  // log_info("write sync status 1 to /tmp/experiment");
+//   int ret = fwrite(&start_flag, sizeof(int), 1, file);
+//   if (ret != 1) {
+//     log_err("fwrite error\n");
+//     fclose(file);
+//     return;
+//   }
+//   // log_info("write sync status 1 to /tmp/experiment");
 
-  ret = fflush(file);
-  if (ret) {
-    log_err("fflush error\n");
-    fclose(file);
-    return;
-  }
+//   ret = fflush(file);
+//   if (ret) {
+//     log_err("fflush error\n");
+//     fclose(file);
+//     return;
+//   }
 
-  ret = fclose(file);
-  if (ret) {
-    log_err("fclose error\n");
-  }
+//   ret = fclose(file);
+//   if (ret) {
+//     log_err("fclose error\n");
+//   }
 
-  uintr_timer_start();
-}
+//   uintr_timer_start();
+// }
 
 void utimer_end_ornot() {
     if (uintr_timer_flag != 1) // not start yet
@@ -338,23 +336,22 @@ int uintr_init(void) {
 int uintr_init_thread(void) {
     int kth_id = myk()->kthread_idx;
     assert(kth_id >= 0 && kth_id < MAX_KTHREADS);
-    // log_info("uintr ends 1");
+
     // For concord:
     concord_preempt_now = 0;
     cpu_preempt_points[kth_id] = &concord_preempt_now;
-    // log_info("concord ends");
+
     // For uintr:
 	if (uintr_register_handler(ui_handler, 0)) {
 		log_err("failure to register uintr handler");
     }
 
 #ifndef M5_UTIMER
-    // log_info("uintr ends 2");
 	int uintr_fd_ = uintr_create_fd(kth_id, 0);
 	if (uintr_fd_ < 0) {
 		log_err("failure to create uintr fd");
     }
-    // log_info("uintr ends 3");
+
     uintr_fd[kth_id] = uintr_fd_; 
 #endif
 
@@ -363,7 +360,7 @@ int uintr_init_thread(void) {
     return 0;
 }
 
-int uintr_init_early_late(void) {
+int uintr_init_early(void) {
 #ifdef SIGNAL_PREEMPT
     struct sigaction action;
     action.sa_handler = signal_handler;
@@ -431,9 +428,9 @@ void uintr_timer_summary(void) {
     printf("Preemption_sent: %lld\n", uintr_sent_total);
     printf("Preemption_received: %lld\n", uintr_recv_total);	
 
-    printf("Number of intervals: %u\n", icnt);
-    for (i = 1; i < icnt; ++i) {
-        printf("%d ", interval[i]);
-    }
+    // printf("Number of intervals: %u\n", icnt);
+    // for (i = 1; i < icnt; ++i) {
+    //     printf("%d ", interval[i]);
+    // }
     preempt_enable();
 }

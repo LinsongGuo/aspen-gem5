@@ -79,6 +79,7 @@ double calc(int n) {
 }
 
 long long matmul() {
+  // printf("**************** matmul start\n");
   int n = 1100;
 /*
   _clui();
@@ -100,6 +101,8 @@ long long matmul() {
   double results = calc(n);
   //_stui();
   // notify("stop");
+  // printf("**************** matmul ends\n");
+  
   return (long long)results*1e6;
   // return fabs(results + 191.1) < 0.1; 
   // _clui();

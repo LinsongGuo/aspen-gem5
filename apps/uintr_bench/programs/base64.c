@@ -127,11 +127,11 @@ void base64_init() {
 
 long long base64() {
   // printf("base64\n");
-  int argc = 1; 
+  int argc = 2; 
   char **argv;
   int TRIES;
 
-  int arg = argc > 1 ? argv[1][0] - '0' : 5;
+  int arg = argc > 1 ? argv[1][0] - '0' : 2;
   switch(arg) {
     case 0: return 0; break;
     case 1: TRIES = 3; break;

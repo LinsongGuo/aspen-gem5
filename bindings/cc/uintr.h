@@ -20,10 +20,6 @@ inline void UintrTimerSummary(void) {
     uintr_timer_summary();
 }
 
-inline void UTimerStart(void) {
-    utimer_start();
-}
-
 inline void SignalUnblock(void) {
     signal_unblock();
 }

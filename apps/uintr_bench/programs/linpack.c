@@ -45,7 +45,7 @@ long long linpack() {
 
     N is the problem size.
 */
-# define N 2000
+# define N 40
 # define LDA ( N + 1 )
 
   double *a;
