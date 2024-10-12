@@ -38,7 +38,7 @@ void server_experiment_start() {
     fclose(file);
     return;
   }
-  log_info("write sync status 1 to /tmp/experiment");
+  // log_info("write sync status 1 to /tmp/experiment");
 
   ret = fflush(file);
   if (ret) {
@@ -449,7 +449,8 @@ void MainHandler_local(void *arg) {
 
 unsigned num_port, num_conn;
 void MainHandler_udpconn(void *arg) {
-  
+  server_experiment_start();
+
   rt::WaitGroup wg(1);
   rt::UintrTimerStart();
 
@@ -469,8 +470,6 @@ void MainHandler_udpconn(void *arg) {
       });
     }
   }
-
-  server_experiment_start();
 
   wg.Wait();
 }

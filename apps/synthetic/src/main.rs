@@ -917,9 +917,6 @@ fn run_client_worker(
 
     let mut last = 100_000_000;
     let mut end = 100_000_000;
-    // let mut last = 10_000_000;
-    // let mut end = 10_000_000;
-    // let mut loop_cnt = 0;
     for sched in schedules.iter() {
         end += duration_to_ns(sched.runtime);
         loop {
@@ -928,9 +925,6 @@ fn run_client_worker(
                 break;
             }
             last = nxt;
-            // if loop_cnt % 100 == 0 {
-            //     println!("last[{}]: {}", loop_cnt, last);
-            // }
             packets.push(Packet {
                 randomness: rng.gen::<u64>(),
                 // target_start: Duration::from_nanos(last),
@@ -938,10 +932,6 @@ fn run_client_worker(
                 work_iterations: sched.service.sample(&mut rng),
                 ..Default::default()
             });
-            // loop_cnt += 1;
-            // if loop_cnt >= packets_per_second {
-            //     break
-            // }
         }
         // println!("{}: {}", index, packets.len());
         sched_boundaries.push(packets.len());
@@ -955,7 +945,6 @@ fn run_client_worker(
         Transport::Tcp => backend.create_tcp_connection(Some(src_addr), addr).unwrap(),
         Transport::Udp => backend.create_udp_connection(src_addr, Some(addr)).unwrap(),
     });
-    println!("socket");
 
     let packets_per_thread = packets.len();
     let socket2 = socket.clone();
@@ -1024,10 +1013,10 @@ fn run_client_worker(
     // });
 
     wg.done();
-    println!("worker: send init done");
+    // println!("worker: send init done");
     wg_start.wait();
     // let start = Instant::now();
-    println!("worker: send starts");
+    // println!("worker: send starts");
     let start = rdtsc();
     for (i, packet) in packets.iter_mut().enumerate() {
         payload.clear();
@@ -1064,30 +1053,26 @@ fn run_client_worker(
             }
             break;
         }
-
-        if i % 100 == 0 {
-            println!("{}", i);
-        }
     }
     
-    println!("worker: send ends");
+    // println!("worker: send ends");
     wg.done();
     wg_start.wait();
-    println!("worker: can join");
+    // println!("worker: can join");
     
     let socket2 = socket.clone();
-    backend.sleep(Duration::from_nanos(100_000_000));
+    backend.sleep(Duration::from_nanos(50_000_000));
     if Arc::strong_count(&socket2) > 1 {
         socket2.shutdown();
     }
-    println!("worker: timer ends, try to kill");
+    // println!("worker: timer ends, try to kill");
 
     let _ = client_experiment_end();
     client_experiment_check();
     let spin_until = rdtsc() + 8500000;
 	while rdtsc() < spin_until {}
         
-    println!("worker: switch");
+    // println!("worker: switch");
 
     // timer.join().unwrap();
     // println!("worker: timer ends");
@@ -1111,7 +1096,7 @@ fn run_client_worker(
             }
         });
 
-    println!("worder: rcv ends");
+    // println!("worder: rcv ends");
     let mut start_index = 0;
     schedules
         .iter()

@@ -187,7 +187,6 @@ void* uintr_timer(void*) {
 #endif 
 
     while(!uintr_timer_flag);
-    log_info("uintr_timer starts");
     _clui();
     
     int i;
@@ -356,7 +355,6 @@ int uintr_init_thread(void) {
 #endif
 
     _stui();
-    log_info("uintr _stui ends");
     return 0;
 }
 
