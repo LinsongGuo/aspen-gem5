@@ -15,7 +15,7 @@ mode = sys.argv[1]
 quantum = int(sys.argv[2])
 mpps = float(sys.argv[3])
 
-prefix = '/caladan-uintr'
+prefix = '/aspen-gem5'
 binary = None
 if mode == 'base':
     binary = 'rocksdb_server_uintr'
