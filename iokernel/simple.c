@@ -211,14 +211,20 @@ static int simple_add_kthread(struct proc *p)
 	struct simple_data *sd = (struct simple_data *)p->policy_data;
 	unsigned int core;
 
-	if (sd->threads_active >= sd->threads_max)
-		return -ENOENT;
+	int ret = -1;
 
-	core = simple_choose_core(p);
-	if (core == NCPU)
-		return -ENOENT;
+	// if (sd->threads_active >= sd->threads_max)
+	// 	return -ENOENT;
 
-	return simple_run_kthread_on_core(p, core);
+	while (sd->threads_active < sd->threads_max) {
+		core = simple_choose_core(p);
+		if (core == NCPU)
+			return -ENOENT;
+
+		ret = simple_run_kthread_on_core(p, core);
+	}
+	return ret;
+	// return simple_run_kthread_on_core(p, core);
 }
 
 int sched_add_kthread(struct proc *p) {

@@ -410,6 +410,7 @@ int cores_pin_thread(pid_t tid, int core)
 
 int uintr_init_late(void) {
     cores_pin_thread(uintr_timer_tid, 4);
+    log_info("pin timer thread %d on core 4", uintr_timer_tid);
     return 0;
 }
 
