@@ -1,0 +1,7 @@
+====== For task core: ======
+Execution: 2.558292224
+Number of uintrs: 4211843
+====== For timer core: ======
+Timer expiration: 613380
+# of tasks: 78
+Throughput: 30

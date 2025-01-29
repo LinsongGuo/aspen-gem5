@@ -1,5 +1,4 @@
 #!/bin/bash
-
 TRIAL=9
 THREADS=24
 

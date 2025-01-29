@@ -14,7 +14,6 @@ def get_data(filename):
         for line in file:
             columns = re.split(r'\s+', line)
             if 'Throughput:' in columns:
-                # print(columns, int(columns[1]))
                 return int(columns[1])
     return None
 
@@ -97,7 +96,6 @@ def plot():
     plt.axhline(y=1, color='gray', linestyle='dashed')
     legend1_labels = Tname
     legend1_lines = [plt.Line2D([0], [0], color=colors[i], lw=2) for i in range(len(Tname))]
-    # legend1 = plt.legend(legend1_lines[::-1], legend1_labels[::-1], fontsize=11, ncol=6, frameon=False, handlelength=1.2, columnspacing=1, handletextpad=0.3,  bbox_to_anchor=(0.1, 1.1))
     legend1 = plt.legend(legend1_lines[::-1], legend1_labels[::-1], fontsize=11, ncol=6, frameon=False, handlelength=1, columnspacing=1, handletextpad=0.3,  loc='lower center', bbox_to_anchor=(0.45, 1.1),)
 
     legend2_labels = ['nanosleep', 'itimer']
@@ -116,7 +114,6 @@ def plot():
     plt.xlabel('Number of Application Cores', fontsize=11)
     plt.ylabel('Timer Core CPU Usage (%)', fontsize=11)
         
-    # Show the plot
     plt.subplots_adjust(left=0.15, right=0.98, top=0.8, bottom=0.18) 
     plt.savefig(f'{RESULT_DIR}/figure1.pdf')
     plt.show()    
