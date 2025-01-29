@@ -94,14 +94,6 @@ static __noreturn void jmp_thread(thread_t *th)
 	uintr_timer_upd(myk()->kthread_idx);
 	barrier();
 #else
-	for(int i = 0; i < 20; i++){
-		asm volatile("nop");
-		asm volatile("nop");
-		asm volatile("nop");
-		asm volatile("nop");
-		asm volatile("nop");
-		asm volatile("nop");
-	}
 	m5_utimer(uthread_quantum_us * 1000000);
 #endif
 
