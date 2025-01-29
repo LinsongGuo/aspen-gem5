@@ -8,6 +8,8 @@ RESULT_DIR="$MAIN_DIR/result/"
 
 mkdir -p $RESULT_DIR
 
+cd $MAIN_DIR
+
 # Run baseline:
 make clean
 make timer=no
@@ -69,8 +71,6 @@ for ((i=0; i<${#Tus[@]}; i++)); do
         done 
     done
 done 
-
-
 
 # Run itimer:
 make clean

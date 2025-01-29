@@ -20,7 +20,6 @@ def get_data(filename):
 
 MAIN_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULT_DIR = f'{MAIN_DIR}/result'
-# RESULT_DIR = "/data/preempt/aspen-gem5/timer_test/results/base64"
 
 trial = 9
 modes = ['sleep', 'itimer']
@@ -124,7 +123,3 @@ def plot():
     
 collect()
 plot()
-
-                            
-        
-
