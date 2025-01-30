@@ -213,18 +213,14 @@ static int simple_add_kthread(struct proc *p)
 
 	int ret = -1;
 
-	// if (sd->threads_active >= sd->threads_max)
-	// 	return -ENOENT;
+	if (sd->threads_active >= sd->threads_max)
+		return -ENOENT;
 
-	while (sd->threads_active < sd->threads_max) {
-		core = simple_choose_core(p);
-		if (core == NCPU)
-			return -ENOENT;
+	core = simple_choose_core(p);
+	if (core == NCPU)
+		return -ENOENT;
 
-		ret = simple_run_kthread_on_core(p, core);
-	}
-	return ret;
-	// return simple_run_kthread_on_core(p, core);
+	return simple_run_kthread_on_core(p, core);
 }
 
 int sched_add_kthread(struct proc *p) {
