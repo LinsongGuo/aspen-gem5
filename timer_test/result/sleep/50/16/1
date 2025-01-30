@@ -1,7 +1,7 @@
 ====== For task core: ======
-Execution: 4.174824192
-Number of uintrs: 704992
+Execution: 3.067001600
+Number of uintrs: 800488
 ====== For timer core: ======
-Timer expiration: 75505
-# of tasks: 726567
-Throughput: 174035
+Timer expiration: 53238
+# of tasks: 413745
+Throughput: 134902

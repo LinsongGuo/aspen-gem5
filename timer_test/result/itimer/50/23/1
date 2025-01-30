@@ -1,7 +1,1 @@
-====== For task core: ======
-Execution: 2.498300416
-Number of uintrs: 1126851
-====== For timer core: ======
-Timer expiration: 49868
-# of tasks: 419110
-Throughput: 167758
+./run_timer.sh: line 103: ./timer: No such file or directory
