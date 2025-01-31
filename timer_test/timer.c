@@ -40,9 +40,9 @@ volatile int uintr_cnt = 0, timer_cnt = 0;
 int num_threads;
 long long quantum;
 long long start, end;
-int tids[MAXTHREADS], uintr_fd[MAXTHREADS], uipi_index[MAXTHREADS];
+int tids[MAXTHREADS], uipi_index[MAXTHREADS];
+volatile int uintr_fd[MAXTHREADS];
 pthread_t pthreads[MAXTHREADS];
-
 int (*test_ptr)(void);
 
 long long now() {
@@ -94,8 +94,15 @@ void uintr_init_timer() {
 	    
     int i;
 	for (i = 0; i < num_threads; ++i) {
+		while( uintr_fd[i] == -1 );
 		uipi_index[i] = uintr_register_sender(uintr_fd[i], 0);
+		if(uipi_index[i] == -1){
+		printf("fd is : %d\n",uintr_fd[i]);
+		printf("i: %d\n",i);
+		perror("index bad");
+		}
 	}
+	
 
 	// The timer start to run
 	start = now();
@@ -226,8 +233,13 @@ void *pthread_entry(void *arg) {
 
 	int tid = *(int*)arg;
 
-	set_thread_affinity(TASK_CORE + 2*tid);
-
+	if(TASK_CORE + tid < 20){
+		set_thread_affinity(TASK_CORE + tid);
+	}
+	else {
+	
+		set_thread_affinity(TASK_CORE + tid+1);
+	}
 	uintr_init_thread(tid);
 
 	long long start2 = now();
@@ -313,6 +325,10 @@ int main(int argc, char *argv[]) {
 	base64_init();
 	test_ptr = base64;
 
+	int i;	
+	for (i = 0; i < num_threads; ++i) {
+		uintr_fd[i] = -1;
+	}
 	init_task_cores();
 
 	init_timer_core();
